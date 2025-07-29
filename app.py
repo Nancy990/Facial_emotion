@@ -1,46 +1,242 @@
 import streamlit as st
-import numpy as np
 import cv2
+import mediapipe as mp
+import numpy as np
+import pandas as pd
 import pickle
-import time
 from PIL import Image
+import io
 
-# Load model
-@st.cache_resource
+# Initialize MediaPipe
+mp_drawing = mp.solutions.drawing_utils
+mp_holistic = mp.solutions.holistic
+
 def load_model():
-    with open("Facial_emotion.pkl", "rb") as f:
-        return pickle.load(f)
+    """Load the trained emotion detection model"""
+    try:
+        with open('Facial_emotion.pkl', 'rb') as f:
+            model = pickle.load(f)
+        return model
+    except FileNotFoundError:
+        st.error("Model file 'Facial_emotion.pkl' not found. Please make sure it's in the same directory.")
+        return None
 
-model = load_model()
+def extract_landmarks(image):
+    """Extract pose and face landmarks from image"""
+    # Convert PIL image to OpenCV format
+    if isinstance(image, Image.Image):
+        image = np.array(image)
+    
+    # Convert RGB to BGR for OpenCV
+    if len(image.shape) == 3 and image.shape[2] == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    
+    # Initialize holistic model
+    with mp_holistic.Holistic(
+        static_image_mode=True,  # Important for static images
+        model_complexity=1,
+        enable_segmentation=False,
+        refine_face_landmarks=True,
+        min_detection_confidence=0.1,  # Lower confidence for static images
+        min_tracking_confidence=0.1
+    ) as holistic:
+        
+        # Convert BGR to RGB for MediaPipe
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        # Process the image
+        results = holistic.process(rgb_image)
+        
+        return results
 
-st.set_page_config(page_title="Facial Emotion Scanner", layout="centered")
-st.title("Facial Emotion Scanner")
-st.markdown("Upload your face photo and let the AI guess your emotion!")
+def process_landmarks(results):
+    """Process landmarks and return feature vector"""
+    try:
+        # Check if we have both pose and face landmarks
+        if results.pose_landmarks is None or results.face_landmarks is None:
+            return None, "Could not detect both face and pose landmarks. Please try a clearer image with full body visible."
+        
+        # Extract Pose landmarks
+        pose = results.pose_landmarks.landmark
+        pose_row = list(np.array([[landmark.x, landmark.y, landmark.z, landmark.visibility] 
+                                 for landmark in pose]).flatten())
+        
+        # Extract Face landmarks
+        face = results.face_landmarks.landmark
+        face_row = list(np.array([[landmark.x, landmark.y, landmark.z, landmark.visibility] 
+                                 for landmark in face]).flatten())
+        
+        # Concatenate rows
+        row = pose_row + face_row
+        
+        return row, None
+        
+    except Exception as e:
+        return None, f"Error processing landmarks: {str(e)}"
 
-uploaded_file = st.file_uploader("📸 Upload a face image", type=["jpg", "jpeg", "png"])
+def predict_emotion(model, landmarks):
+    """Predict emotion from landmarks"""
+    try:
+        # Create DataFrame with landmarks
+        X = pd.DataFrame([landmarks])
+        
+        # Make prediction
+        prediction = model.predict(X)[0]
+        probabilities = model.predict_proba(X)[0]
+        
+        return prediction, probabilities
+        
+    except Exception as e:
+        return None, f"Error making prediction: {str(e)}"
 
-if uploaded_file:
-    img = Image.open(uploaded_file)
-    img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-    st.image(img, caption="Uploaded Image", use_container_width=True)
+def draw_landmarks_on_image(image, results):
+    """Draw landmarks on the image for visualization"""
+    if isinstance(image, Image.Image):
+        image = np.array(image)
+    
+    # Convert RGB to BGR for OpenCV processing
+    if len(image.shape) == 3 and image.shape[2] == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    
+    # Draw face landmarks
+    if results.face_landmarks:
+        mp_drawing.draw_landmarks(
+            image, results.face_landmarks, mp_holistic.FACEMESH_TESSELATION,
+            mp_drawing.DrawingSpec(color=(80,110,10), thickness=1, circle_radius=1),
+            mp_drawing.DrawingSpec(color=(80,256,121), thickness=1, circle_radius=1)
+        )
+    
+    # Draw pose landmarks
+    if results.pose_landmarks:
+        mp_drawing.draw_landmarks(
+            image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS,
+            mp_drawing.DrawingSpec(color=(245,117,66), thickness=2, circle_radius=4),
+            mp_drawing.DrawingSpec(color=(245,66,230), thickness=2, circle_radius=2)
+        )
+    
+    # Draw hand landmarks
+    if results.right_hand_landmarks:
+        mp_drawing.draw_landmarks(
+            image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+            mp_drawing.DrawingSpec(color=(80,22,10), thickness=2, circle_radius=4),
+            mp_drawing.DrawingSpec(color=(80,44,121), thickness=2, circle_radius=2)
+        )
+    
+    if results.left_hand_landmarks:
+        mp_drawing.draw_landmarks(
+            image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+            mp_drawing.DrawingSpec(color=(121,22,76), thickness=2, circle_radius=4),
+            mp_drawing.DrawingSpec(color=(121,44,250), thickness=2, circle_radius=2)
+        )
+    
+    # Convert back to RGB for display
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return image
 
-    st.markdown("🔍 **Scanning face...**")
-    progress = st.progress(0)
-    for percent in range(100):
-        time.sleep(0.01)
-        progress.progress(percent + 1)
+def main():
+    st.title("🎭 Emotion Detection from Images")
+    st.write("Upload an image and let our AI detect the emotion!")
+    
+    # Load model
+    model = load_model()
+    if model is None:
+        st.stop()
+    
+    # File uploader
+    uploaded_file = st.file_uploader(
+        "Choose an image...", 
+        type=['jpg', 'jpeg', 'png', 'bmp'],
+        help="For best results, use images with clear view of face and body posture"
+    )
+    
+    if uploaded_file is not None:
+        # Display uploaded image
+        image = Image.open(uploaded_file)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Original Image")
+            st.image(image, caption="Uploaded Image", use_column_width=True)
+        
+        # Process the image
+        with st.spinner("Analyzing image..."):
+            # Extract landmarks
+            results = extract_landmarks(image)
+            
+            # Process landmarks
+            landmarks, error = process_landmarks(results)
+            
+            if error:
+                st.error(error)
+                st.info("Tips for better results:")
+                st.write("- Use images with clear lighting")
+                st.write("- Make sure both face and body are visible")
+                st.write("- Avoid heavily cropped images")
+                st.write("- Try images where the person is facing the camera")
+            else:
+                # Make prediction
+                prediction, probabilities = predict_emotion(model, landmarks)
+                
+                if isinstance(probabilities, str):  # Error case
+                    st.error(probabilities)
+                else:
+                    with col2:
+                        st.subheader("Analysis Results")
+                        
+                        # Draw landmarks on image
+                        annotated_image = draw_landmarks_on_image(image.copy(), results)
+                        st.image(annotated_image, caption="Detected Landmarks", use_column_width=True)
+                    
+                    # Display results
+                    st.success(f"🎯 Detected Emotion: **{prediction}**")
+                    
+                    # Display confidence
+                    max_prob = np.max(probabilities)
+                    st.info(f"📊 Confidence: {max_prob:.2%}")
+                    
+                    # Display all class probabilities
+                    st.subheader("📈 Probability Distribution")
+                    
+                    # Get class names (you might need to adjust these based on your model)
+                    class_names = ['Doubt', 'Happy', 'Normal', 'Stressed']  # Adjust based on your classes
+                    
+                    # Create a dataframe for better visualization
+                    prob_df = pd.DataFrame({
+                        'Emotion': class_names,
+                        'Probability': probabilities
+                    }).sort_values('Probability', ascending=False)
+                    
+                    # Display as bar chart
+                    st.bar_chart(prob_df.set_index('Emotion'))
+                    
+                    # Display as table
+                    st.dataframe(prob_df, use_container_width=True)
+    
+    # Add information about the model
+    with st.expander("ℹ️ About this Model"):
+        st.write("""
+        This emotion detection model uses MediaPipe for pose and facial landmark detection,
+        combined with machine learning to classify emotions based on body language and facial expressions.
+        
+        **Supported Emotions:**
+        - Normal
+        - Happy  
+        - Doubt
+        - Stressed
+        
+        **How it works:**
+        1. Extracts facial and pose landmarks from the image
+        2. Processes the landmarks into feature vectors
+        3. Uses a trained Random Forest classifier to predict emotions
+        
+        **For best results:**
+        - Use clear, well-lit images
+        - Include both face and upper body in the frame
+        - Avoid heavily filtered or distorted images
+        """)
 
-    # Dummy preprocessing
-    face_resized = cv2.resize(img_cv, (48, 48))
-    face_gray = cv2.cvtColor(face_resized, cv2.COLOR_BGR2GRAY)
-    input_features = face_gray.flatten().reshape(1, -1)
-
-    # Check input shape matches model
-    if input_features.shape[1] == model.named_steps['standardscaler'].n_features_in_:
-        pred = model.predict(input_features)[0]
-        st.success(f"🎯 **Predicted Emotion:** `{pred}`")
-    else:
-        st.error("Image does not match expected input size. Try a face-only image.")
-
+if __name__ == "__main__":
+    main()
 
 
