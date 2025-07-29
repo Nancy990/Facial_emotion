@@ -93,7 +93,7 @@ def extract_face_features(image):
     
     # Pad features to match original model input size (this is a workaround)
     # Since your original model expects MediaPipe landmarks, we need to pad
-    target_size = 1662  # Approximate size based on MediaPipe landmarks
+    target_size = 2004  # Correct size based on error message
     current_size = len(features)
     
     if current_size < target_size:
@@ -192,7 +192,7 @@ def main():
         
         with col1:
             st.subheader("Original Image")
-            st.image(image, caption="Uploaded Image", use_column_width=True)
+            st.image(image, caption="Uploaded Image", use_container_width=True)
         
         # Process the image
         with st.spinner("Analyzing image..."):
@@ -229,7 +229,7 @@ def main():
                     
                     # Draw face detection
                     annotated_image = draw_face_detection(image.copy())
-                    st.image(annotated_image, caption="Detected Face", use_column_width=True)
+                    st.image(annotated_image, caption="Detected Face", use_container_width=True)
                 
                 # Display results
                 st.success(f"🎯 Detected Emotion: **{prediction}**")
