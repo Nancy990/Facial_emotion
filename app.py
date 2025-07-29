@@ -131,67 +131,7 @@ def analyze_face_shape(face_roi):
         'jaw_angle': jaw_angle
     }
 
-def estimate_age(face_roi, face_measurements):
-    """Estimate age based on facial features and measurements"""
-    h, w = face_roi.shape
-    
-    # Analyze skin texture and wrinkles
-    # More edges and texture variation typically indicate older age
-    edges = cv2.Canny(face_roi, 30, 100)
-    edge_density = np.sum(edges > 0) / (h * w)
-    
-    # Analyze contrast and uniformity
-    std_intensity = np.std(face_roi)
-    mean_intensity = np.mean(face_roi)
-    
-    # Analyze different face regions
-    eye_region = face_roi[:h//3]  # Upper third
-    cheek_region = face_roi[h//3:2*h//3]  # Middle third
-    
-    eye_texture = np.std(eye_region)
-    cheek_smoothness = 255 - np.std(cheek_region)  # Inverse of texture
-    
-    # Age estimation factors
-    texture_factor = min(edge_density * 1000, 50)  # 0-50 years from texture
-    contrast_factor = min(std_intensity / 2, 30)   # 0-30 years from contrast
-    smoothness_factor = max(0, 40 - cheek_smoothness / 5)  # Younger faces are smoother
-    
-    # Face ratio can indicate age (faces change shape with age)
-    ratio_factor = 0
-    if 'face_ratio' in face_measurements:
-        # Very young or very old faces have different proportions
-        if face_measurements['face_ratio'] < 1.2 or face_measurements['face_ratio'] > 1.4:
-            ratio_factor = 10
-    
-    # Calculate estimated age
-    estimated_age = texture_factor + contrast_factor + smoothness_factor + ratio_factor
-    estimated_age = max(5, min(estimated_age, 80))  # Clamp between 5-80
-    
-    # Age range and confidence
-    if estimated_age < 18:
-        age_range = "Child/Teen (5-17)"
-        confidence = 0.6
-    elif estimated_age < 30:
-        age_range = "Young Adult (18-29)"
-        confidence = 0.7
-    elif estimated_age < 45:
-        age_range = "Adult (30-44)"
-        confidence = 0.8
-    elif estimated_age < 60:
-        age_range = "Middle-aged (45-59)"
-        confidence = 0.7
-    else:
-        age_range = "Senior (60+)"
-        confidence = 0.6
-    
-    return {
-        'estimated_age': int(estimated_age),
-        'age_range': age_range,
-        'confidence': confidence,
-        'texture_score': texture_factor,
-        'contrast_score': contrast_factor,
-        'smoothness_score': smoothness_factor
-    }
+
 
 def get_face_measurements(face_roi):
     """Get detailed face measurements and proportions"""
@@ -233,7 +173,7 @@ def get_face_measurements(face_roi):
     
     return measurements
 
-def draw_face_analysis(image, face_coords, shape_info, age_info, measurements):
+def draw_face_analysis(image, face_coords, shape_info, measurements):
     """Draw comprehensive face analysis on image"""
     if isinstance(image, Image.Image):
         image = np.array(image)
@@ -254,8 +194,6 @@ def draw_face_analysis(image, face_coords, shape_info, age_info, measurements):
     # Add labels
     cv2.putText(image, f"Shape: {shape_info['shape']}", (x, y-30), 
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-    cv2.putText(image, f"Age: {age_info['age_range']}", (x, y-10), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
     
     # Draw measurement points
     # Forehead center
@@ -510,7 +448,6 @@ def main():
                 # Perform comprehensive face analysis
                 face_measurements = get_face_measurements(face_roi)
                 shape_analysis = analyze_face_shape(face_roi)
-                age_analysis = estimate_age(face_roi, face_measurements)
                 
                 try:
                     # Make prediction with trained model
@@ -533,7 +470,7 @@ def main():
                     # Draw comprehensive face analysis
                     if face_coords is not None:
                         annotated_image = draw_face_analysis(
-                            image.copy(), face_coords, shape_analysis, age_analysis, face_measurements
+                            image.copy(), face_coords, shape_analysis, face_measurements
                         )
                         st.image(annotated_image, caption="Face Analysis Overlay", use_container_width=True)
                 
@@ -618,37 +555,6 @@ def main():
                 
                 if shape_analysis['shape'] in shape_chars:
                     st.info(f"**{shape_analysis['shape']} Face:** {shape_chars[shape_analysis['shape']]}")
-                
-                # === AGE ESTIMATION SECTION ===
-                st.markdown("---")
-                st.header("⏰ Age Estimation")
-                
-                col_age1, col_age2 = st.columns(2)
-                
-                with col_age1:
-                    st.metric(
-                        "Estimated Age", 
-                        f"{age_analysis['estimated_age']} years",
-                        help="Estimated based on facial texture, contrast, and features"
-                    )
-                    st.metric(
-                        "Age Range", 
-                        age_analysis['age_range'],
-                        help="Broader age category for the estimation"
-                    )
-                    st.metric(
-                        "Age Confidence", 
-                        f"{age_analysis['confidence']:.1%}",
-                        help="Confidence level in the age estimation"
-                    )
-                
-                with col_age2:
-                    st.metric("Skin Texture Score", f"{age_analysis['texture_score']:.1f}")
-                    st.metric("Facial Contrast", f"{age_analysis['contrast_score']:.1f}")
-                    st.metric("Skin Smoothness", f"{age_analysis['smoothness_score']:.1f}")
-                
-                # Age estimation disclaimer
-                st.warning("⚠️ **Disclaimer:** Age estimation is approximate and based on visible facial characteristics. Actual age may vary significantly.")
                 
                 # === DETAILED MEASUREMENTS SECTION ===
                 st.markdown("---")
@@ -773,18 +679,20 @@ def main():
                 symmetry_score = face_measurements['symmetry_score']
                 beauty_factors.append(('Facial Symmetry', symmetry_score, 0.30))
                 
-                # Proportional balance (weight: 20%)
+                # Proportional balance (weight: 30%)
                 proportion_score = max(0, avg_proportion_score)
-                beauty_factors.append(('Proportional Balance', proportion_score, 0.20))
+                beauty_factors.append(('Proportional Balance', proportion_score, 0.30))
                 
-                # Skin smoothness (weight: 15%)
-                smoothness_score = max(0, 100 - age_analysis['texture_score'] * 2)
-                beauty_factors.append(('Skin Smoothness', smoothness_score, 0.15))
+                # Skin smoothness (weight: 20%)
+                # Calculate skin smoothness from face texture
+                std_intensity = np.std(face_roi)
+                smoothness_score = max(0, 100 - std_intensity * 2)
+                beauty_factors.append(('Skin Smoothness', smoothness_score, 0.20))
                 
-                # Face shape preference (weight: 10%)
+                # Face shape preference (weight: 15%)
                 shape_scores = {'Oval': 95, 'Heart': 85, 'Round': 80, 'Square': 75, 'Rectangle': 70, 'Diamond': 85, 'Pear': 70}
                 shape_score = shape_scores.get(shape_analysis['shape'], 70)
-                beauty_factors.append(('Face Shape', shape_score, 0.10))
+                beauty_factors.append(('Face Shape', shape_score, 0.15))
                 
                 # Calculate overall beauty score
                 overall_beauty_score = sum(score * weight for _, score, weight in beauty_factors)
@@ -843,7 +751,9 @@ def main():
                 if face_measurements['symmetry_score'] < 70:
                     tips.append("📸 **Photo Tip:** Try different angles to find your most symmetric side")
                 
-                if age_analysis['texture_score'] > 25:
+                # Calculate skin texture from face region
+                std_intensity = np.std(face_roi)
+                if std_intensity > 25:
                     tips.append("🧴 **Skincare Tip:** Focus on moisturizing and gentle exfoliation for smoother skin texture")
                 
                 if shape_analysis['shape'] == 'Round':
@@ -866,14 +776,13 @@ def main():
     # Model information and tips
     with st.expander("ℹ️ About This Advanced Analysis System"):
         st.write("""
-        ### 🔬 **Comprehensive Face Analysis Technology**
+        ### 🔬 **Advanced Face Analysis Technology**
         
         This system provides multi-dimensional facial analysis using advanced computer vision:
         
         **🎯 Analysis Features:**
         - **Emotion Detection**: AI-powered emotion recognition from facial expressions
         - **Face Shape Classification**: 7 major face shapes with confidence scoring
-        - **Age Estimation**: Age range prediction based on facial characteristics
         - **Detailed Measurements**: Precise facial proportions and dimensions
         - **Beauty Analysis**: Mathematical beauty scoring based on golden ratios
         - **Symmetry Assessment**: Left-right facial symmetry evaluation
@@ -894,18 +803,18 @@ def main():
         - **Pear**: Narrow forehead, wide jaw
         - **Diamond**: Wide cheekbones, narrow forehead and chin
         
-        **⏰ Age Estimation Factors:**
-        - **Skin Texture**: Smoothness and fine line analysis
+        **⏰ Facial Analysis Factors:**
+        - **Skin Texture**: Smoothness and fine pattern analysis
         - **Facial Contrast**: Light/dark variation patterns
-        - **Feature Positioning**: How facial features change with age
-        - **Edge Detection**: Wrinkle and texture pattern recognition
+        - **Feature Positioning**: Geometric feature relationships
+        - **Edge Detection**: Texture and pattern recognition
         
         **✨ Beauty Score Components:**
         - **Golden Ratio (25%)**: 1.618 ratio adherence
         - **Symmetry (30%)**: Left-right facial balance
-        - **Proportions (20%)**: Facial thirds and feature balance
-        - **Skin Quality (15%)**: Smoothness and texture
-        - **Face Shape (10%)**: Shape preference scoring
+        - **Proportions (30%)**: Facial thirds and feature balance
+        - **Skin Quality (20%)**: Smoothness and texture
+        - **Face Shape (15%)**: Shape preference scoring
         
         **💡 For Best Results:**
         - Use clear, well-lit photos with front-facing pose
