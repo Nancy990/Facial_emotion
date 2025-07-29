@@ -81,12 +81,14 @@ def analyze_face_shape(face_roi):
     lines = cv2.HoughLines(edges, 1, np.pi/180, threshold=50)
     jaw_angle = 90  # Default
     
-    if lines is not None:
+    if lines is not None and len(lines) > 0:
         angles = []
-        for rho, theta in lines[:5]:  # Check first 5 lines
-            angle = theta * 180 / np.pi
-            if 45 < angle < 135:  # Filter for relevant angles
-                angles.append(angle)
+        for line in lines[:5]:  # Check first 5 lines
+            if len(line) >= 2:  # Ensure line has at least 2 values
+                rho, theta = line[0]  # HoughLines returns lines in format [[rho, theta]]
+                angle = theta * 180 / np.pi
+                if 45 < angle < 135:  # Filter for relevant angles
+                    angles.append(angle)
         if angles:
             jaw_angle = np.mean(angles)
     
