@@ -1,10 +1,10 @@
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import numpy as np
-import cv2
-import mediapipe as mp
 import pickle
+import cv2
 
-# Load model
+# Load the model
 @st.cache_resource
 def load_model():
     with open("Facial_emotion.pkl", "rb") as f:
@@ -12,55 +12,38 @@ def load_model():
 
 model = load_model()
 
-# Setup MediaPipe
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1)
-
-# Streamlit UI
 st.set_page_config(page_title="Live Facial Emotion Detection", layout="wide")
 st.title("🧠 Real-Time Facial Emotion Detection")
-st.markdown("Allow webcam access and click 'Start Webcam'.")
+st.markdown("Webcam-based facial emotion detection using a trained model.")
 
-# Start webcam stream
-run = st.checkbox("Start Webcam")
+# Dummy face detection using OpenCV Haar cascades (for simplicity)
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-frame_window = st.image([])
+class EmotionDetector(VideoTransformerBase):
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
 
-cap = None
-if run:
-    cap = cv2.VideoCapture(0)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-while run and cap.isOpened():
-    success, frame = cap.read()
-    if not success:
-        st.warning("Failed to grab frame.")
-        break
+        for (x, y, w, h) in faces:
+            face = img[y:y+h, x:x+w]
+            face_resized = cv2.resize(face, (48, 48))  # assuming 48x48 input size
+            face_gray = cv2.cvtColor(face_resized, cv2.COLOR_BGR2GRAY)
+            face_flat = face_gray.flatten().reshape(1, -1)
 
-    # Convert BGR to RGB
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(frame_rgb)
+            if face_flat.shape[1] == model.named_steps['standardscaler'].n_features_in_:
+                pred = model.predict(face_flat)[0]
+                cv2.putText(img, f"{pred}", (x, y-10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            else:
+                cv2.putText(img, "Invalid input size", (x, y-10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
-    if results.multi_face_landmarks:
-        for face_landmarks in results.multi_face_landmarks:
-            # Extract normalized landmarks as input features
-            face_points = np.array(
-                [[lm.x, lm.y, lm.z] for lm in face_landmarks.landmark]
-            ).flatten().reshape(1, -1)
+            cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 0), 2)
 
-            # If landmark count doesn't match model input, skip
-            if face_points.shape[1] != model.named_steps['standardscaler'].n_features_in_:
-                cv2.putText(frame, "Face landmark mismatch", (30, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                continue
+        return img
 
-            prediction = model.predict(face_points)[0]
-            cv2.putText(frame, f"Emotion: {prediction}", (30, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-    frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-    frame_window.image(frame_bgr)
-
-# Release camera
-if cap:
-    cap.release()
+# Start the webcam stream
+webrtc_streamer(key="emotion", video_transformer_factory=EmotionDetector)
 
