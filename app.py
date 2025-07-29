@@ -1,15 +1,41 @@
 import streamlit as st
 import cv2
-import mediapipe as mp
 import numpy as np
 import pandas as pd
 import pickle
 from PIL import Image
 import io
 
-# Initialize MediaPipe
-mp_drawing = mp.solutions.drawing_utils
-mp_holistic = mp.solutions.holistic
+# Try to import MediaPipe, show error if not available
+try:
+    import mediapipe as mp
+    mp_drawing = mp.solutions.drawing_utils
+    mp_holistic = mp.solutions.holistic
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+    st.error("""
+    ❌ **MediaPipe not available**
+    
+    This app requires MediaPipe for pose and facial landmark detection. 
+    MediaPipe installation failed on this platform.
+    
+    **Solutions:**
+    1. **For local development:** Install MediaPipe manually:
+       ```
+       pip install mediapipe==0.9.3.0
+       ```
+    
+    2. **For deployment:** Try using a different hosting platform like:
+       - Heroku
+       - Google Cloud Run  
+       - AWS Lambda
+       - Local hosting
+    
+    3. **Alternative approach:** Consider using a simpler emotion detection model 
+       that doesn't require MediaPipe (face-only detection with dlib or OpenCV)
+    """)
+    st.stop()
 
 def load_model():
     """Load the trained emotion detection model"""
@@ -23,6 +49,9 @@ def load_model():
 
 def extract_landmarks(image):
     """Extract pose and face landmarks from image"""
+    if not MEDIAPIPE_AVAILABLE:
+        return None
+        
     # Convert PIL image to OpenCV format
     if isinstance(image, Image.Image):
         image = np.array(image)
@@ -33,11 +62,11 @@ def extract_landmarks(image):
     
     # Initialize holistic model
     with mp_holistic.Holistic(
-        static_image_mode=True,  # Important for static images
+        static_image_mode=True,
         model_complexity=1,
         enable_segmentation=False,
         refine_face_landmarks=True,
-        min_detection_confidence=0.1,  # Lower confidence for static images
+        min_detection_confidence=0.1,
         min_tracking_confidence=0.1
     ) as holistic:
         
@@ -91,6 +120,9 @@ def predict_emotion(model, landmarks):
 
 def draw_landmarks_on_image(image, results):
     """Draw landmarks on the image for visualization"""
+    if not MEDIAPIPE_AVAILABLE:
+        return image
+        
     if isinstance(image, Image.Image):
         image = np.array(image)
     
@@ -135,6 +167,10 @@ def draw_landmarks_on_image(image, results):
 
 def main():
     st.title("🎭 Emotion Detection from Images")
+    
+    if not MEDIAPIPE_AVAILABLE:
+        st.stop()
+    
     st.write("Upload an image and let our AI detect the emotion!")
     
     # Load model
@@ -198,8 +234,8 @@ def main():
                     # Display all class probabilities
                     st.subheader("📈 Probability Distribution")
                     
-                    # Get class names (you might need to adjust these based on your model)
-                    class_names = ['Doubt', 'Happy', 'Normal', 'Stressed']  # Adjust based on your classes
+                    # Get class names (adjust based on your model)
+                    class_names = ['Doubt', 'Happy', 'Normal', 'Stressed']
                     
                     # Create a dataframe for better visualization
                     prob_df = pd.DataFrame({
@@ -238,5 +274,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
