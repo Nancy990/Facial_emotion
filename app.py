@@ -283,7 +283,7 @@ def extract_opencv_features(image):
     faces = face_cascade.detectMultiScale(gray, 1.1, 4)
     
     if len(faces) == 0:
-        return None, "No face detected in the image. Please upload an image with a clear face."
+        return None, "No face detected in the image. Please upload an image with a clear face.", None, None
     
     # Use the largest face
     face = max(faces, key=lambda x: x[2] * x[3])
@@ -482,13 +482,20 @@ def main():
         # Process the image
         with st.spinner("🔍 Analyzing facial features..."):
             # Extract features
-            result = extract_opencv_features(image)
-            
-            if len(result) == 4:
-                features, error, face_coords, face_roi = result
-            else:
-                features, error = result
-                face_coords, face_roi = None, None
+            try:
+                result = extract_opencv_features(image)
+                
+                if result[1] is not None:  # Error case
+                    features, error = result[:2]
+                    face_coords, face_roi = None, None
+                else:  # Success case
+                    features, error, face_coords, face_roi = result
+            except ValueError as ve:
+                st.error(f"Feature extraction error: {str(ve)}")
+                features, error, face_coords, face_roi = None, "Feature extraction failed", None, None
+            except Exception as e:
+                st.error(f"Unexpected error during feature extraction: {str(e)}")
+                features, error, face_coords, face_roi = None, "Unexpected error occurred", None, None
             
             if error:
                 st.error(error)
