@@ -319,9 +319,9 @@ def main():
                     try:
                         class_names = model.classes_.tolist() if hasattr(model, 'classes_') else ['Doubt', 'Happy', 'Normal', 'Stressed']
                     except:
-                        class_names = ['Doubt', 'Happy', 'Normal', 'Stressed']
+                        class_names = ['Sad', 'Happy', 'Normal', 'Stressed']
                 else:
-                    class_names = ['Doubt', 'Happy', 'Normal', 'Stressed']
+                    class_names = ['Sad', 'Happy', 'Normal', 'Stressed']
                 
                 # Ensure we have the right number of probabilities
                 if len(probabilities) != len(class_names):
@@ -387,7 +387,7 @@ def main():
         **📈 Supported Emotions:**
         - **Normal**: Neutral or calm expression
         - **Happy**: Smiling or joyful expression  
-        - **Doubt**: Questioning or uncertain expression
+        - **Sad**: Sad or uncertain expression
         - **Stressed**: Tense or worried expression
         
         **🔧 How It Works:**
