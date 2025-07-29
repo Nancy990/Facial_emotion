@@ -22,7 +22,7 @@ uploaded_file = st.file_uploader("📸 Upload a face image", type=["jpg", "jpeg"
 if uploaded_file:
     img = Image.open(uploaded_file)
     img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-    st.image(img, caption="Uploaded Image", use_column_width=True)
+    st.image(img, caption="Uploaded Image", use_container_width=True)
 
     st.markdown("🔍 **Scanning face...**")
     progress = st.progress(0)
