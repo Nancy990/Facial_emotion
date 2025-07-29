@@ -233,7 +233,7 @@ def draw_face_detection(image):
     return image
 
 def main():
-    st.title("🎭 Enhanced OpenCV Emotion Detection")
+    st.title("Enhanced OpenCV Emotion Detection")
     st.write("Upload an image and let our AI detect emotions using advanced face analysis!")
     
     # Load model
