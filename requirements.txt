@@ -3,3 +3,5 @@ opencv-python-headless
 scikit-learn
 numpy
 Pillow
+mediapipe
+pandas
