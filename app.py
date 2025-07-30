@@ -8,68 +8,12 @@ import io
 import math
 import json
 from datetime import datetime
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 import plotly.graph_objects as go
 import plotly.express as px
 
-class AdvancedFaceAnalyzer:
-    def __init__(self):
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        self.emotion_model = self.build_cnn_emotion_model()
-        self.age_model = self.build_age_estimation_model()
-        
-    def build_cnn_emotion_model(self):
-        """Build a CNN model for emotion detection"""
-        model = Sequential([
-            Conv2D(32, (3, 3), activation='relu', input_shape=(48, 48, 1)),
-            MaxPooling2D(2, 2),
-            Conv2D(64, (3, 3), activation='relu'),
-            MaxPooling2D(2, 2),
-            Conv2D(128, (3, 3), activation='relu'),
-            MaxPooling2D(2, 2),
-            Flatten(),
-            Dense(512, activation='relu'),
-            Dropout(0.5),
-            Dense(7, activation='softmax')  # 7 emotions
-        ])
-        return model
-    
-    def build_age_estimation_model(self):
-        """Build a CNN model for age estimation"""
-        model = Sequential([
-            Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
-            MaxPooling2D(2, 2),
-            Conv2D(64, (3, 3), activation='relu'),
-            MaxPooling2D(2, 2),
-            Conv2D(128, (3, 3), activation='relu'),
-            MaxPooling2D(2, 2),
-            Conv2D(256, (3, 3), activation='relu'),
-            MaxPooling2D(2, 2),
-            Flatten(),
-            Dense(512, activation='relu'),
-            Dropout(0.5),
-            Dense(256, activation='relu'),
-            Dropout(0.3),
-            Dense(1, activation='linear')  # Age regression
-        ])
-        return model
-
 def load_model():
-    """Load the trained emotion detection model with better mobile support"""
-    model_files = ['opencv_emotion_model.pkl', 'Facial_emotion.pkl']
-    
-    for model_file in model_files:
-        try:
-            with open(model_file, 'rb') as f:
-                model = pickle.load(f)
-            st.success(f"✅ Loaded model: {model_file}")
-            return model, model_file
-        except FileNotFoundError:
-            continue
-    
-    st.warning("⚠️ No pre-trained model found. Using enhanced CNN-based detection.")
+    """Load model placeholder - using rule-based detection"""
+    st.warning("⚠️ Using rule-based emotion detection.")
     return None, None
 
 def preprocess_mobile_image(image):
@@ -77,9 +21,12 @@ def preprocess_mobile_image(image):
     if isinstance(image, Image.Image):
         image = np.array(image)
     
+    # Handle EXIF orientation for mobile images
     if len(image.shape) == 3 and image.shape[2] == 4:  # RGBA
         image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
     
+    # Enhance image quality for better face detection
+    # Increase contrast and brightness
     lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
@@ -87,102 +34,98 @@ def preprocess_mobile_image(image):
     enhanced = cv2.merge([l, a, b])
     enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2RGB)
     
+    # Denoise
     enhanced = cv2.bilateralFilter(enhanced, 9, 75, 75)
     
     return enhanced
 
-def extract_2d_face(image):
-    """Extract 2D face bounding box using OpenCV Haar cascade"""
-    analyzer = AdvancedFaceAnalyzer()
-    
-    if isinstance(image, Image.Image):
-        image = np.array(image)
-    
-    image = preprocess_mobile_image(image)
-    
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    faces = analyzer.face_cascade.detectMultiScale(gray, 1.1, 4)
-    
-    if len(faces) > 0:
-        face_coords = max(faces, key=lambda x: x[2] * x[3])  # Choose largest face
-        return face_coords, image
-    return None, image
-
 def analyze_face_shape_advanced(face_coords, image_shape):
-    """Simplified face shape analysis using 2D face bounding box"""
+    """Simplified face shape analysis using OpenCV face detection"""
     if face_coords is None:
         return {'shape': 'Unknown', 'confidence': 0}
     
     x, y, w, h = face_coords
-    h_img, w_img = image_shape[:2]
+    face_length = h
+    face_width = w
     
-    # Normalize measurements
-    face_width = w / w_img
-    face_height = h / h_img
-    length_width_ratio = face_height / face_width if face_width > 0 else 1
+    # Face ratios
+    length_width_ratio = face_length / face_width if face_width > 0 else 1
+    jaw_face_ratio = face_width / (image_shape[1] * 0.5) if image_shape[1] > 0 else 1
     
-    # Simplified shape classification based on bounding box ratio
+    # Simplified shape classification
     if length_width_ratio > 1.4:
-        shape = "Oval"
-        confidence = 0.9
+        if jaw_face_ratio < 0.8:
+            shape = "Heart"
+            confidence = 0.85
+        else:
+            shape = "Oval"
+            confidence = 0.9
     elif length_width_ratio < 1.1:
-        shape = "Round"
-        confidence = 0.85
+        if jaw_face_ratio > 0.9:
+            shape = "Square"
+            confidence = 0.8
+        else:
+            shape = "Round"
+            confidence = 0.85
     else:
-        shape = "Rectangle"
-        confidence = 0.8
+        if jaw_face_ratio < 0.7:
+            shape = "Diamond"
+            confidence = 0.75
+        elif jaw_face_ratio > 0.95:
+            shape = "Rectangle"
+            confidence = 0.8
+        else:
+            shape = "Oval"
+            confidence = 0.9
     
     return {
         'shape': shape,
         'confidence': confidence,
         'face_ratio': length_width_ratio,
+        'jaw_ratio': jaw_face_ratio,
         'measurements': {
-            'face_width': face_width,
-            'face_height': face_height
+            'face_length': face_length,
+            'face_width': face_width
         }
     }
 
-def calculate_beauty_score_advanced(face_coords, shape_analysis, image):
-    """Calculate beauty score using 2D face metrics"""
+def calculate_beauty_score_advanced(face_coords, shape_analysis, image_shape):
+    """Calculate beauty score using simplified face data"""
     if face_coords is None:
         return 50, []
     
     beauty_factors = []
     
-    # Facial symmetry (using intensity differences)
+    # 1. Facial Symmetry (35% weight)
     x, y, w, h = face_coords
-    face_roi = image[y:y+h, x:x+w]
-    if face_roi.size == 0:
-        return 50, []
-    
-    gray = cv2.cvtColor(face_roi, cv2.COLOR_RGB2GRAY)
-    left_half = gray[:, :w//2]
-    right_half = gray[:, w//2:]
-    if left_half.shape == right_half.shape:
-        symmetry_score = 100 - np.mean(np.abs(left_half - np.fliplr(right_half))) / 2
-        symmetry_score = max(0, min(100, symmetry_score))
-    else:
-        symmetry_score = 75
-    
+    center_x = x + w / 2
+    image_center = image_shape[1] / 2
+    symmetry_score = max(0, 100 - abs(center_x - image_center) / image_center * 100)
     beauty_factors.append(('Facial Symmetry', symmetry_score, 0.35))
     
-    # Golden ratio adherence
+    # 2. Golden Ratio Adherence (25% weight)
     golden_ratio = 1.618
     face_ratio = shape_analysis.get('face_ratio', 1.3)
     golden_deviation = abs(face_ratio - golden_ratio) / golden_ratio * 100
     golden_score = max(0, 100 - golden_deviation * 2)
     beauty_factors.append(('Golden Ratio', golden_score, 0.25))
     
-    # Feature proportion (simplified)
+    # 3. Feature Proportion (25% weight)
     measurements = shape_analysis.get('measurements', {})
-    proportion_score = 75  # Default for 2D
+    if measurements:
+        ideal_jaw_ratio = 0.85
+        actual_jaw_ratio = shape_analysis.get('jaw_ratio', 0.85)
+        proportion_score = max(0, 100 - abs(actual_jaw_ratio - ideal_jaw_ratio) * 200)
+    else:
+        proportion_score = 75
     beauty_factors.append(('Feature Proportion', proportion_score, 0.25))
     
-    # Face shape preference
-    shape_scores = {'Oval': 95, 'Round': 80, 'Rectangle': 70}
+    # 4. Face Shape Preference (15% weight)
+    shape_scores = {'Oval': 95, 'Heart': 90, 'Diamond': 85, 'Round': 80, 'Square': 75, 'Rectangle': 70}
     shape_score = shape_scores.get(shape_analysis.get('shape', 'Oval'), 75)
     beauty_factors.append(('Face Shape', shape_score, 0.15))
     
+    # Calculate overall score
     overall_score = sum(score * weight for _, score, weight in beauty_factors)
     
     return overall_score, beauty_factors
@@ -204,11 +147,29 @@ def get_makeup_recommendations(face_shape, beauty_factors):
             "💋 **Lips**: Slightly overlining can add structure",
             "✨ **Highlight**: Apply to bridge of nose and chin to add length"
         ],
+        'Square': [
+            "🌟 **Soften**: Use rounded eyebrow shapes and soft, blended eyeshadow",
+            "💄 **Lips**: Rounded lip shapes will balance angular features",
+            "✨ **Highlight**: Focus on center of face - forehead, nose, chin",
+            "🎨 **Blush**: Apply in circular motions on apple of cheeks"
+        ],
+        'Heart': [
+            "💋 **Balance**: Draw attention to lips with bold colors",
+            "👁️ **Eyes**: Keep eye makeup subtle to not overpower narrow chin",
+            "✨ **Contour**: Lightly contour temples to reduce forehead width",
+            "🌸 **Blush**: Apply lower on cheekbones, closer to jawline"
+        ],
         'Rectangle': [
             "🌟 **Width**: Add width with blush applied horizontally across cheeks",
             "👁️ **Eyes**: Horizontal eyeshadow application to widen face",
             "💄 **Lips**: Full, horizontal lip shapes",
             "✨ **Contour**: Minimize forehead and chin, emphasize cheeks"
+        ],
+        'Diamond': [
+            "💎 **Balance**: Soften prominent cheekbones with subtle contouring",
+            "👁️ **Eyes**: Draw attention upward with defined brows and eye makeup",
+            "💋 **Lips**: Fuller lips balance narrow chin and forehead",
+            "✨ **Highlight**: Focus on forehead and chin to add width"
         ]
     }
     
@@ -222,8 +183,8 @@ def get_makeup_recommendations(face_shape, beauty_factors):
     
     return recommendations
 
-def get_facial_exercises(face_shape, age_estimate=None):
-    """Generate facial exercise recommendations"""
+def get_facial_exercises(face_shape):
+    """Generate facial exercise recommendations without age-specific exercises"""
     exercises = []
     
     universal_exercises = [
@@ -238,6 +199,14 @@ def get_facial_exercises(face_shape, age_estimate=None):
             "🔥 **Cheek Toning**: Suck in cheeks and hold for 10 seconds",
             "💪 **Jaw Definition**: Chew sugar-free gum to strengthen jaw muscles"
         ],
+        'Square': [
+            "🌸 **Jaw Relaxation**: Massage jaw muscles to reduce tension",
+            "😌 **Soft Expressions**: Practice gentle, relaxed facial expressions"
+        ],
+        'Heart': [
+            "💋 **Lip Exercises**: Pucker and release lips to strengthen lower face",
+            "🎯 **Chin Strengthening**: Press tongue to roof of mouth, hold 5 seconds"
+        ],
         'Rectangle': [
             "😄 **Cheek Lifts**: Smile lifting cheek muscles, hold 5 seconds",
             "🌟 **Face Widening**: Gently stretch face horizontally with hands"
@@ -247,30 +216,17 @@ def get_facial_exercises(face_shape, age_estimate=None):
     exercises.extend(universal_exercises)
     exercises.extend(shape_exercises.get(face_shape, []))
     
-    if age_estimate:
-        if age_estimate > 40:
-            exercises.extend([
-                "🌿 **Anti-Aging**: Fish face exercise - suck in cheeks and lips",
-                "✨ **Neck Toning**: Tilt head back, push lower jaw forward"
-            ])
-        elif age_estimate > 30:
-            exercises.extend([
-                "🔄 **Prevention**: Gentle face yoga to maintain muscle tone",
-                "💧 **Hydration**: Facial massage with moisturizer"
-            ])
-    
     return exercises
 
 def save_progress(analysis_data):
-    """Save analysis progress for tracking"""
+    """Save analysis progress for tracking without age data"""
     timestamp = datetime.now().isoformat()
     
     progress_data = {
         'timestamp': timestamp,
         'beauty_score': analysis_data.get('beauty_score', 0),
         'face_shape': analysis_data.get('face_shape', 'Unknown'),
-        'emotion': analysis_data.get('emotion', 'Unknown'),
-        'age_estimate': analysis_data.get('age_estimate', 0)
+        'emotion': analysis_data.get('emotion', 'Unknown')
     }
     
     if 'progress_history' not in st.session_state:
@@ -281,7 +237,7 @@ def save_progress(analysis_data):
     return len(st.session_state.progress_history)
 
 def show_progress_tracking():
-    """Display progress tracking visualization"""
+    """Display progress tracking visualization without age data"""
     if 'progress_history' not in st.session_state or not st.session_state.progress_history:
         st.info("📊 No progress data yet. Analyze some images to start tracking!")
         return
@@ -309,7 +265,7 @@ def show_progress_tracking():
             st.metric("Trend", trend)
 
 def predict_emotion_cnn(image, face_coords):
-    """Enhanced emotion prediction using CNN approach"""
+    """Rule-based emotion prediction using OpenCV"""
     try:
         x, y, w, h = face_coords
         face_roi = image[y:y+h, x:x+w]
@@ -362,13 +318,13 @@ def predict_emotion_cnn(image, face_coords):
 
 def main():
     st.set_page_config(
-        page_title="Advanced Face Analysis",
+        page_title="Face Analysis",
         page_icon="🎭",
         layout="wide"
     )
     
-    st.title("🎭 Advanced Face Analysis & Beauty Enhancement")
-    st.write("Upload an image for comprehensive facial analysis, emotion detection, beauty scoring, and personalized recommendations!")
+    st.title("🎭 Face Analysis & Beauty Enhancement")
+    st.write("Upload an image for facial analysis, emotion detection, beauty scoring, and personalized recommendations!")
     
     st.sidebar.title("🔧 Analysis Options")
     analysis_mode = st.sidebar.selectbox(
@@ -399,13 +355,17 @@ def main():
             st.subheader("📸 Original Image")
             st.image(image, caption="Uploaded Image", use_container_width=True)
         
-        with st.spinner("🔍 Performing advanced analysis..."):
-            face_coords, processed_image = extract_2d_face(processed_image)
+        with st.spinner("🔍 Performing analysis..."):
+            gray = cv2.cvtColor(processed_image, cv2.COLOR_RGB2GRAY)
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            faces = face_cascade.detectMultiScale(gray, 1.1, 4)
             
-            if face_coords is None:
+            if len(faces) == 0:
                 st.error("❌ No face detected. Please try another image with a clear, front-facing face.")
                 st.info("💡 **Mobile Tips:**\n- Use good lighting\n- Keep face centered\n- Remove sunglasses\n- Try different angles")
                 return
+            
+            face_coords = max(faces, key=lambda x: x[2] * x[3])
             
             shape_analysis = analyze_face_shape_advanced(face_coords, processed_image.shape)
             
@@ -415,43 +375,28 @@ def main():
             col_shape1, col_shape2, col_shape3 = st.columns(3)
             
             with col_shape1:
-                st.metric(
-                    "Face Shape", 
-                    shape_analysis['shape'],
-                    help="2D bounding box-based shape analysis"
-                )
-                st.metric(
-                    "Confidence", 
-                    f"{shape_analysis['confidence']:.1%}",
-                    help="Algorithm confidence in shape classification"
-                )
+                st.metric("Face Shape", shape_analysis['shape'], help="Shape analysis based on face detection")
+                st.metric("Confidence", f"{shape_analysis['confidence']:.1%}", help="Algorithm confidence in shape classification")
             
             with col_shape2:
-                st.metric(
-                    "Face Ratio", 
-                    f"{shape_analysis['face_ratio']:.2f}",
-                    help="Height to width ratio"
-                )
+                st.metric("Face Ratio", f"{shape_analysis['face_ratio']:.2f}", help="Length to width ratio")
+                st.metric("Jaw Ratio", f"{shape_analysis['jaw_ratio']:.2f}", help="Jaw width to face width ratio")
             
             with col_shape3:
                 measurements = shape_analysis.get('measurements', {})
                 if measurements:
-                    st.metric("Face Width", f"{measurements.get('face_width', 0):.2f}")
-                    st.metric("Face Height", f"{measurements.get('face_height', 0):.2f}")
+                    st.metric("Face Length", f"{measurements.get('face_length', 0):.1f}")
+                    st.metric("Face Width", f"{measurements.get('face_width', 0):.1f}")
             
             st.markdown("---")
             st.header("✨ Beauty & Attractiveness Analysis")
             
-            beauty_score, beauty_factors = calculate_beauty_score_advanced(face_coords, shape_analysis, processed_image)
+            beauty_score, beauty_factors = calculate_beauty_score_advanced(face_coords, shape_analysis, processed_image.shape)
             
             col_beauty1, col_beauty2 = st.columns(2)
             
             with col_beauty1:
-                st.metric(
-                    "Overall Beauty Score", 
-                    f"{beauty_score:.1f}/100",
-                    help="2D analysis-based beauty scoring"
-                )
+                st.metric("Overall Beauty Score", f"{beauty_score:.1f}/100", help="Beauty scoring based on face analysis")
                 
                 if beauty_score >= 90:
                     st.success("🌟 **Category**: Exceptionally Beautiful")
@@ -467,12 +412,7 @@ def main():
             with col_beauty2:
                 st.subheader("Beauty Factor Breakdown")
                 for factor_name, score, weight in beauty_factors:
-                    st.metric(
-                        factor_name, 
-                        f"{score:.1f}/100",
-                        delta=f"Weight: {weight:.0%}",
-                        help=f"Contributes {weight:.0%} to overall score"
-                    )
+                    st.metric(factor_name, f"{score:.1f}/100", delta=f"Weight: {weight:.0%}", help=f"Contributes {weight:.0%} to overall score")
             
             st.subheader("📊 Beauty Analysis Breakdown")
             factor_df = pd.DataFrame({
@@ -523,9 +463,7 @@ def main():
             st.markdown("---")
             st.header("🏃‍♀️ Personalized Facial Exercises")
             
-            age_estimate = 25 + (100 - beauty_score) * 0.3  # Simplified age estimation
-            
-            exercises = get_facial_exercises(shape_analysis['shape'], age_estimate)
+            exercises = get_facial_exercises(shape_analysis['shape'])
             
             st.subheader("💪 Daily Facial Workout Routine")
             st.write("**Recommended duration**: 10-15 minutes daily")
@@ -544,8 +482,7 @@ def main():
             analysis_data = {
                 'beauty_score': beauty_score,
                 'face_shape': shape_analysis['shape'],
-                'emotion': emotion,
-                'age_estimate': age_estimate
+                'emotion': emotion
             }
             
             if st.button("💾 Save Analysis to Progress"):
@@ -559,25 +496,53 @@ def main():
                     trend = "📈 Improving" if recent_scores[-1] > recent_scores[0] else "📊 Stable"
                     st.info(f"**Recent Trend**: {trend} | **Average Score**: {np.mean(recent_scores):.1f}")
             
+            st.markdown("---")
+            st.header("🎥 Real-Time Video Analysis")
+            
+            st.info("""
+            🔄 **Coming Soon - Real-Time Features:**
+            - Live webcam emotion detection
+            - Real-time beauty scoring
+            - Dynamic makeup try-on
+            - Live facial exercise guidance
+            - Progress tracking during exercises
+            
+            📱 **Current Capabilities:**
+            - Upload multiple images for comparison
+            - Batch analysis of photo series
+            - Progress tracking over time
+            """)
+            
+            enable_video = st.checkbox("🎥 Enable Experimental Video Analysis")
+            
+            if enable_video:
+                st.warning("⚠️ Video analysis is experimental. Performance may vary.")
+                
+                video_placeholder = st.empty()
+                
+                if st.button("📹 Start Video Analysis (Demo)"):
+                    with video_placeholder.container():
+                        st.info("🎬 Video analysis would appear here in full implementation")
+                        st.write("Features would include:")
+                        st.write("- Real-time face tracking")
+                        st.write("- Live emotion detection")
+                        st.write("- Dynamic beauty scoring")
+                        st.write("- Exercise form checking")
+            
             with st.expander("🔬 Advanced Analysis Insights"):
-                st.subheader("🧬 Facial Feature Insights")
+                st.subheader("🧬 Facial Analysis Insights")
                 
                 if face_coords is not None:
                     x, y, w, h = face_coords
-                    face_ratio = w / h if h > 0 else 1
-                    symmetry_score = beauty_factors[0][1]  # From beauty factors
-                    
                     col_insights1, col_insights2 = st.columns(2)
                     
                     with col_insights1:
-                        st.metric("Face Width Ratio", f"{face_ratio:.2f}")
-                        st.metric("Symmetry Score", f"{symmetry_score:.1f}")
+                        st.metric("Face Width", f"{w:.2f}")
+                        st.metric("Face Height", f"{h:.2f}")
                     
                     with col_insights2:
                         harmony_score = (beauty_score + shape_analysis['confidence'] * 100) / 2
                         st.metric("Facial Harmony", f"{harmony_score:.1f}/100")
-                        aging_factor = max(0, 100 - beauty_score) * 0.5
-                        st.metric("Aging Factor", f"{aging_factor:.1f}")
                 
                 st.subheader("🎯 Improvement Potential")
                 
@@ -610,11 +575,13 @@ def main():
                 if comparison_file is not None:
                     comp_image = Image.open(comparison_file)
                     comp_processed = preprocess_mobile_image(comp_image)
-                    comp_face_coords, comp_processed = extract_2d_face(comp_processed)
+                    gray = cv2.cvtColor(comp_processed, cv2.COLOR_RGB2GRAY)
+                    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
                     
-                    if comp_face_coords is not None:
+                    if len(faces) > 0:
+                        comp_face_coords = max(faces, key=lambda x: x[2] * x[3])
                         comp_shape = analyze_face_shape_advanced(comp_face_coords, comp_processed.shape)
-                        comp_beauty, comp_factors = calculate_beauty_score_advanced(comp_face_coords, comp_shape, comp_processed)
+                        comp_beauty, comp_factors = calculate_beauty_score_advanced(comp_face_coords, comp_shape, comp_processed.shape)
                         
                         col_comp1, col_comp2 = st.columns(2)
                         
@@ -638,15 +605,15 @@ def main():
                     else:
                         st.error("Could not analyze comparison image")
     
-    with st.expander("ℹ️ About Advanced Face Analysis"):
+    with st.expander("ℹ️ About Face Analysis"):
         st.write("""
-        ### 🚀 **Next-Generation Face Analysis Technology**
+        ### 🚀 **Face Analysis Technology**
         
-        **🧠 AI & Machine Learning:**
-        - **CNN Emotion Detection**: Deep learning emotion recognition
-        - **Advanced Age Estimation**: Multi-factor age prediction models
-        - **Real-time Processing**: Optimized for mobile and web deployment
-        - **Progressive Enhancement**: Continuous learning capabilities
+        **🧠 Analysis Features:**
+        - **Emotion Detection**: Rule-based analysis using facial features
+        - **Face Shape Analysis**: Based on face proportions
+        - **Beauty Scoring**: Symmetry and proportion-based assessment
+        - **Personalized Recommendations**: Tailored makeup and exercise tips
         
         **📱 Mobile Optimization:**
         - **Enhanced Preprocessing**: CLAHE contrast enhancement
@@ -658,18 +625,11 @@ def main():
         - **Face Shape Specific**: Tailored recommendations for each shape
         - **Beauty Factor Analysis**: Multi-dimensional beauty assessment
         - **Dynamic Recommendations**: Adaptive based on individual features
-        - **Progress Tracking**: Long-term beauty and health monitoring
+        - **Progress Tracking**: Long-term beauty monitoring
         
         **🏃‍♀️ Wellness Integration:**
         - **Facial Exercise Programs**: Scientifically-based face yoga
-        - **Anti-aging Protocols**: Age-specific exercise routines
         - **Progress Monitoring**: Track improvements over time
-        - **Health Insights**: Facial analysis for wellness indicators
-        
-        **🔬 Scientific Accuracy:**
-        - **Golden Ratio Analysis**: Mathematical beauty standards
-        - **Symmetry Algorithms**: Advanced bilateral comparison
-        - **Anthropometric Standards**: Based on facial anthropometry research
         """)
     
     with st.expander("🎯 How to Get Best Results"):
@@ -710,8 +670,8 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: #666;'>
-        🎭 Advanced Face Analysis System | 
-        Built with OpenCV, TensorFlow & Streamlit | 
+        🎭 Face Analysis System | 
+        Built with Streamlit & OpenCV | 
         ⚠️ For entertainment and educational purposes
     </div>
     """, unsafe_allow_html=True)
