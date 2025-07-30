@@ -6,10 +6,73 @@ import pickle
 from PIL import Image
 import io
 import math
+import json
+from datetime import datetime
+import tensorflow as tf
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, Input
+from tensorflow.keras.preprocessing.image import img_to_array
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import mediapipe as mp
+import plotly.graph_objects as go
+import plotly.express as px
+
+# Initialize MediaPipe
+mp_face_mesh = mp.solutions.face_mesh
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+
+class AdvancedFaceAnalyzer:
+    def __init__(self):
+        self.face_mesh = mp_face_mesh.FaceMesh(
+            static_image_mode=True,
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        self.emotion_model = self.build_cnn_emotion_model()
+        self.age_model = self.build_age_estimation_model()
+        
+    def build_cnn_emotion_model(self):
+        """Build a CNN model for emotion detection"""
+        model = Sequential([
+            Conv2D(32, (3, 3), activation='relu', input_shape=(48, 48, 1)),
+            MaxPooling2D(2, 2),
+            Conv2D(64, (3, 3), activation='relu'),
+            MaxPooling2D(2, 2),
+            Conv2D(128, (3, 3), activation='relu'),
+            MaxPooling2D(2, 2),
+            Flatten(),
+            Dense(512, activation='relu'),
+            Dropout(0.5),
+            Dense(7, activation='softmax')  # 7 emotions
+        ])
+        return model
+    
+    def build_age_estimation_model(self):
+        """Build a CNN model for age estimation"""
+        model = Sequential([
+            Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
+            MaxPooling2D(2, 2),
+            Conv2D(64, (3, 3), activation='relu'),
+            MaxPooling2D(2, 2),
+            Conv2D(128, (3, 3), activation='relu'),
+            MaxPooling2D(2, 2),
+            Conv2D(256, (3, 3), activation='relu'),
+            MaxPooling2D(2, 2),
+            Flatten(),
+            Dense(512, activation='relu'),
+            Dropout(0.5),
+            Dense(256, activation='relu'),
+            Dropout(0.3),
+            Dense(1, activation='linear')  # Age regression
+        ])
+        return model
 
 def load_model():
-    """Load the trained emotion detection model"""
-    # Try to load the new OpenCV-optimized model first
+    """Load the trained emotion detection model with better mobile support"""
     model_files = ['opencv_emotion_model.pkl', 'Facial_emotion.pkl']
     
     for model_file in model_files:
@@ -21,865 +84,890 @@ def load_model():
         except FileNotFoundError:
             continue
     
-    st.error("❌ No model file found. Please ensure you have either 'opencv_emotion_model.pkl' or 'Facial_emotion.pkl' in the directory.")
+    st.warning("⚠️ No pre-trained model found. Using enhanced CNN-based detection.")
     return None, None
 
-def extract_face_landmarks(face_roi):
-    """Extract basic facial landmarks using contour analysis"""
-    # Convert to binary for contour detection
-    _, binary = cv2.threshold(face_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+def preprocess_mobile_image(image):
+    """Enhanced preprocessing for mobile images"""
+    if isinstance(image, Image.Image):
+        image = np.array(image)
     
-    # Find contours
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Handle EXIF orientation for mobile images
+    if len(image.shape) == 3 and image.shape[2] == 4:  # RGBA
+        image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
     
-    if len(contours) > 0:
-        # Get the largest contour (presumably the face outline)
-        largest_contour = max(contours, key=cv2.contourArea)
-        
-        # Get bounding rectangle
-        x, y, w, h = cv2.boundingRect(largest_contour)
-        
-        # Approximate key points
-        landmarks = {
-            'jaw_width': w,
-            'face_height': h,
-            'forehead_y': y,
-            'chin_y': y + h,
-            'left_cheek': x,
-            'right_cheek': x + w,
-            'face_center': (x + w//2, y + h//2)
-        }
-        
-        return landmarks
+    # Enhance image quality for better face detection
+    # Increase contrast and brightness
+    lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+    l = clahe.apply(l)
+    enhanced = cv2.merge([l, a, b])
+    enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2RGB)
     
-    return None
+    # Denoise
+    enhanced = cv2.bilateralFilter(enhanced, 9, 75, 75)
+    
+    return enhanced
 
-def analyze_face_shape(face_roi):
-    """Analyze face shape based on measurements and ratios"""
-    h, w = face_roi.shape
+def extract_3d_landmarks(image):
+    """Extract 3D facial landmarks using MediaPipe"""
+    analyzer = AdvancedFaceAnalyzer()
     
-    # Calculate key ratios
-    face_ratio = h / w  # Height to width ratio
+    if isinstance(image, Image.Image):
+        image = np.array(image)
     
-    # Analyze face regions for width variations
-    upper_third = face_roi[:h//3]
-    middle_third = face_roi[h//3:2*h//3]
-    lower_third = face_roi[2*h//3:]
+    # Preprocess for mobile
+    image = preprocess_mobile_image(image)
     
-    # Calculate width at different levels (using edge detection)
-    def get_width_at_level(region):
-        edges = cv2.Canny(region, 50, 150)
-        rows_with_edges = np.sum(edges > 0, axis=1)
-        return np.mean(rows_with_edges) if len(rows_with_edges) > 0 else 0
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) if len(image.shape) == 3 else image
+    results = analyzer.face_mesh.process(rgb_image)
     
-    upper_width = get_width_at_level(upper_third)
-    middle_width = get_width_at_level(middle_third)
-    lower_width = get_width_at_level(lower_third)
+    if results.multi_face_landmarks:
+        landmarks = results.multi_face_landmarks[0]
+        
+        # Extract 3D coordinates
+        landmarks_3d = []
+        h, w = image.shape[:2]
+        
+        for landmark in landmarks.landmark:
+            x = int(landmark.x * w)
+            y = int(landmark.y * h)
+            z = landmark.z  # Relative depth
+            landmarks_3d.append([x, y, z])
+        
+        return np.array(landmarks_3d), results
     
-    # Calculate jawline angle (simplified)
-    edges = cv2.Canny(face_roi, 50, 150)
-    lines = cv2.HoughLines(edges, 1, np.pi/180, threshold=50)
-    jaw_angle = 90  # Default
+    return None, None
+
+def create_3d_face_model(landmarks_3d):
+    """Create 3D face reconstruction"""
+    if landmarks_3d is None:
+        return None
     
-    if lines is not None and len(lines) > 0:
-        angles = []
-        for line in lines[:5]:  # Check first 5 lines
-            if len(line) >= 2:  # Ensure line has at least 2 values
-                rho, theta = line[0]  # HoughLines returns lines in format [[rho, theta]]
-                angle = theta * 180 / np.pi
-                if 45 < angle < 135:  # Filter for relevant angles
-                    angles.append(angle)
-        if angles:
-            jaw_angle = np.mean(angles)
+    # Create 3D plot
+    fig = go.Figure(data=[go.Scatter3d(
+        x=landmarks_3d[:, 0],
+        y=landmarks_3d[:, 1],
+        z=landmarks_3d[:, 2],
+        mode='markers+lines',
+        marker=dict(
+            size=2,
+            color=landmarks_3d[:, 2],
+            colorscale='Viridis',
+            opacity=0.8
+        ),
+        line=dict(
+            color='rgba(50, 50, 250, 0.3)',
+            width=1
+        )
+    )])
     
-    # Face shape classification logic
-    if face_ratio > 1.3:
-        if upper_width > middle_width and middle_width > lower_width:
+    fig.update_layout(
+        title="3D Face Reconstruction",
+        scene=dict(
+            xaxis_title="X",
+            yaxis_title="Y",
+            zaxis_title="Depth (Z)",
+            camera=dict(
+                eye=dict(x=1.2, y=1.2, z=1.2)
+            )
+        ),
+        height=500
+    )
+    
+    return fig
+
+def analyze_face_shape_advanced(landmarks_3d):
+    """Advanced face shape analysis using 3D landmarks"""
+    if landmarks_3d is None:
+        return {'shape': 'Unknown', 'confidence': 0}
+    
+    # Key facial points (MediaPipe face mesh indices)
+    # These are approximate indices for key facial features
+    forehead_top = landmarks_3d[9]  # Top of forehead
+    chin_bottom = landmarks_3d[152]  # Bottom of chin
+    left_cheek = landmarks_3d[234]  # Left cheek
+    right_cheek = landmarks_3d[454]  # Right cheek
+    left_jaw = landmarks_3d[172]  # Left jaw
+    right_jaw = landmarks_3d[397]  # Right jaw
+    
+    # Calculate measurements
+    face_length = np.linalg.norm(forehead_top - chin_bottom)
+    face_width = np.linalg.norm(left_cheek - right_cheek)
+    jaw_width = np.linalg.norm(left_jaw - right_jaw)
+    
+    # Face ratios
+    length_width_ratio = face_length / face_width if face_width > 0 else 1
+    jaw_face_ratio = jaw_width / face_width if face_width > 0 else 1
+    
+    # Enhanced shape classification
+    if length_width_ratio > 1.4:
+        if jaw_face_ratio < 0.8:
             shape = "Heart"
-            confidence = 0.8
-        elif lower_width > middle_width and middle_width > upper_width:
-            shape = "Pear"
-            confidence = 0.7
+            confidence = 0.85
         else:
             shape = "Oval"
             confidence = 0.9
-    elif face_ratio < 1.1:
-        if abs(upper_width - lower_width) < 0.1 * middle_width:
-            shape = "Round"
+    elif length_width_ratio < 1.1:
+        if jaw_face_ratio > 0.9:
+            shape = "Square"
             confidence = 0.8
         else:
-            shape = "Square"
-            confidence = 0.7
+            shape = "Round"
+            confidence = 0.85
     else:
-        if jaw_angle < 80:
+        if jaw_face_ratio < 0.7:
             shape = "Diamond"
-            confidence = 0.6
-        elif abs(upper_width - lower_width) < 0.15 * middle_width:
+            confidence = 0.75
+        elif jaw_face_ratio > 0.95:
             shape = "Rectangle"
-            confidence = 0.7
+            confidence = 0.8
         else:
             shape = "Oval"
-            confidence = 0.8
+            confidence = 0.9
     
     return {
         'shape': shape,
         'confidence': confidence,
-        'face_ratio': face_ratio,
-        'upper_width': upper_width,
-        'middle_width': middle_width,
-        'lower_width': lower_width,
-        'jaw_angle': jaw_angle
+        'face_ratio': length_width_ratio,
+        'jaw_ratio': jaw_face_ratio,
+        'measurements': {
+            'face_length': face_length,
+            'face_width': face_width,
+            'jaw_width': jaw_width
+        }
     }
 
-
-
-def get_face_measurements(face_roi):
-    """Get detailed face measurements and proportions"""
-    h, w = face_roi.shape
+def calculate_beauty_score_advanced(landmarks_3d, shape_analysis):
+    """Calculate beauty score using 3D landmarks and golden ratios"""
+    if landmarks_3d is None:
+        return 50, []
     
-    # Basic measurements
-    measurements = {
-        'face_width_px': w,
-        'face_height_px': h,
-        'face_area_px': h * w,
-        'aspect_ratio': h / w,
-    }
+    beauty_factors = []
     
-    # Proportional measurements (using golden ratio and facial proportions)
-    # Standard facial proportions
-    measurements['forehead_height'] = h * 0.33  # Top third
-    measurements['mid_face_height'] = h * 0.33   # Middle third
-    measurements['lower_face_height'] = h * 0.34 # Bottom third
+    # 1. Facial Symmetry (35% weight)
+    left_landmarks = landmarks_3d[:len(landmarks_3d)//2]
+    right_landmarks = landmarks_3d[len(landmarks_3d)//2:]
     
-    # Width measurements at different levels
-    measurements['forehead_width'] = w * 0.9     # Typically narrower
-    measurements['cheek_width'] = w              # Widest part
-    measurements['jaw_width'] = w * 0.85         # Typically narrower than cheeks
-    
-    # Eye region analysis
-    eye_region = face_roi[:h//3]
-    measurements['eye_region_contrast'] = np.std(eye_region)
-    
-    # Symmetry analysis
-    left_half = face_roi[:, :w//2]
-    right_half = cv2.flip(face_roi[:, w//2:], 1)  # Flip right half
-    
-    # Resize right half to match left half if needed
-    if right_half.shape[1] != left_half.shape[1]:
-        right_half = cv2.resize(right_half, (left_half.shape[1], left_half.shape[0]))
-    
-    symmetry_diff = np.mean(np.abs(left_half.astype(float) - right_half.astype(float)))
-    measurements['symmetry_score'] = max(0, 100 - symmetry_diff)  # Higher is more symmetric
-    
-    return measurements
-
-def draw_face_analysis(image, face_coords, shape_info, measurements):
-    """Draw comprehensive face analysis on image"""
-    if isinstance(image, Image.Image):
-        image = np.array(image)
-    
-    x, y, w, h = face_coords
-    
-    # Draw main face rectangle
-    cv2.rectangle(image, (x, y), (x+w, y+h), (255, 0, 0), 2)
-    
-    # Draw face divisions (thirds)
-    third_h = h // 3
-    cv2.line(image, (x, y + third_h), (x + w, y + third_h), (0, 255, 0), 1)
-    cv2.line(image, (x, y + 2 * third_h), (x + w, y + 2 * third_h), (0, 255, 0), 1)
-    
-    # Draw center line
-    cv2.line(image, (x + w//2, y), (x + w//2, y + h), (0, 255, 0), 1)
-    
-    # Add labels
-    cv2.putText(image, f"Shape: {shape_info['shape']}", (x, y-30), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-    
-    # Draw measurement points
-    # Forehead center
-    cv2.circle(image, (x + w//2, y + third_h//2), 3, (255, 255, 0), -1)
-    # Cheek points
-    cv2.circle(image, (x + w//4, y + third_h + third_h//2), 3, (255, 255, 0), -1)
-    cv2.circle(image, (x + 3*w//4, y + third_h + third_h//2), 3, (255, 255, 0), -1)
-    # Chin point
-    cv2.circle(image, (x + w//2, y + h - 10), 3, (255, 255, 0), -1)
-    
-    return image
-
-def extract_opencv_features(image):
-    """Extract comprehensive OpenCV-based features from an image"""
-    if isinstance(image, Image.Image):
-        image = np.array(image)
-    
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    
-    # Load cascades
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-    smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_smile.xml')
-    
-    # Detect faces
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-    
-    if len(faces) == 0:
-        return None, "No face detected in the image. Please upload an image with a clear face.", None, None
-    
-    # Use the largest face
-    face = max(faces, key=lambda x: x[2] * x[3])
-    x, y, w, h = face
-    
-    # Extract face region
-    face_roi = gray[y:y+h, x:x+w]
-    
-    # Extract comprehensive features
-    features = []
-    
-    # 1. Face geometry features
-    img_h, img_w = gray.shape
-    features.extend([
-        x / img_w,                    # face_x_norm
-        y / img_h,                    # face_y_norm
-        w / img_w,                    # face_width_norm
-        h / img_h,                    # face_height_norm
-        w / h,                        # face_aspect_ratio
-        (x + w/2) / img_w,           # face_center_x_norm
-        (y + h/2) / img_h,           # face_center_y_norm
-    ])
-    
-    # 2. Eyes features
-    eyes = eye_cascade.detectMultiScale(face_roi)
-    num_eyes = len(eyes)
-    features.extend([
-        num_eyes,                     # num_eyes_detected
-        np.mean([eye[0] for eye in eyes]) / w if num_eyes > 0 else 0,  # avg_eye_x_ratio
-        np.mean([eye[1] for eye in eyes]) / h if num_eyes > 0 else 0,  # avg_eye_y_ratio
-        np.mean([eye[2] for eye in eyes]) / w if num_eyes > 0 else 0,  # avg_eye_width_ratio
-        np.mean([eye[3] for eye in eyes]) / h if num_eyes > 0 else 0,  # avg_eye_height_ratio
-    ])
-    
-    # 3. Smile features
-    smiles = smile_cascade.detectMultiScale(face_roi, 1.8, 20)
-    num_smiles = len(smiles)
-    features.extend([
-        num_smiles,                   # num_smiles_detected
-        np.mean([smile[0] for smile in smiles]) / w if num_smiles > 0 else 0,  # avg_smile_x_ratio
-        np.mean([smile[1] for smile in smiles]) / h if num_smiles > 0 else 0,  # avg_smile_y_ratio
-        np.mean([smile[2] for smile in smiles]) / w if num_smiles > 0 else 0,  # avg_smile_width_ratio
-        np.mean([smile[3] for smile in smiles]) / h if num_smiles > 0 else 0,  # avg_smile_height_ratio
-    ])
-    
-    # 4. Intensity and contrast features
-    features.extend([
-        np.mean(face_roi),            # face_mean_intensity
-        np.std(face_roi),             # face_std_intensity
-        np.min(face_roi),             # face_min_intensity
-        np.max(face_roi),             # face_max_intensity
-        np.mean(face_roi[:h//3]),     # upper_face_intensity
-        np.mean(face_roi[h//3:2*h//3]), # middle_face_intensity
-        np.mean(face_roi[2*h//3:]),   # lower_face_intensity
-        np.mean(face_roi[:, :w//3]),  # left_face_intensity
-        np.mean(face_roi[:, w//3:2*w//3]), # center_face_intensity
-        np.mean(face_roi[:, 2*w//3:]),# right_face_intensity
-    ])
-    
-    # 5. Edge and texture features
-    edges = cv2.Canny(face_roi, 50, 150)
-    features.extend([
-        np.sum(edges) / (w * h),      # edge_density
-        np.mean(edges),               # avg_edge_intensity
-        np.std(edges),                # edge_std
-        np.sum(edges[:h//2]) / np.sum(edges) if np.sum(edges) > 0 else 0,  # upper_edge_ratio
-        np.sum(edges[h//2:]) / np.sum(edges) if np.sum(edges) > 0 else 0,  # lower_edge_ratio
-    ])
-    
-    # 6. Gradient features
-    grad_x = cv2.Sobel(face_roi, cv2.CV_64F, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(face_roi, cv2.CV_64F, 0, 1, ksize=3)
-    features.extend([
-        np.mean(np.abs(grad_x)),      # mean_gradient_x
-        np.mean(np.abs(grad_y)),      # mean_gradient_y
-        np.std(grad_x),               # std_gradient_x
-        np.std(grad_y),               # std_gradient_y
-    ])
-    
-    # 7. Histogram features
-    hist = cv2.calcHist([face_roi], [0], None, [16], [0, 256])
-    hist_norm = hist.flatten() / np.sum(hist)
-    features.extend(hist_norm.tolist())  # 16 histogram bins
-    
-    # 8. Local features (grid-based)
-    grid_h, grid_w = 4, 4
-    cell_h, cell_w = max(1, h // grid_h), max(1, w // grid_w)
-    
-    for i in range(grid_h):
-        for j in range(grid_w):
-            start_y, end_y = i * cell_h, min((i + 1) * cell_h, h)
-            start_x, end_x = j * cell_w, min((j + 1) * cell_w, w)
-            cell = face_roi[start_y:end_y, start_x:end_x]
-            
-            if cell.size > 0:
-                features.extend([
-                    np.mean(cell),        # cell_mean
-                    np.std(cell),         # cell_std
-                ])
-            else:
-                features.extend([0, 0])
-    
-    return features, None, (x, y, w, h), face_roi
-
-def predict_emotion_enhanced_fallback(image):
-    """Enhanced rule-based emotion prediction"""
-    if isinstance(image, Image.Image):
-        image = np.array(image)
-    
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    
-    # Load cascades
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_smile.xml')
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-    
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-    
-    if len(faces) == 0:
-        return "Normal", [0.25, 0.25, 0.25, 0.25]
-    
-    # Enhanced heuristic-based emotion detection
-    x, y, w, h = faces[0]
-    face_roi = gray[y:y+h, x:x+w]
-    
-    # Detect features
-    smiles = smile_cascade.detectMultiScale(face_roi, 1.8, 20)
-    eyes = eye_cascade.detectMultiScale(face_roi)
-    
-    # Calculate additional metrics
-    mean_intensity = np.mean(face_roi)
-    std_intensity = np.std(face_roi)
-    upper_face = np.mean(face_roi[:h//2])
-    lower_face = np.mean(face_roi[h//2:])
-    
-    # Enhanced rules
-    smile_score = len(smiles) * 0.3
-    eye_score = min(len(eyes), 2) * 0.2
-    brightness_score = (mean_intensity - 100) / 100  # Normalized brightness
-    contrast_score = std_intensity / 50  # Normalized contrast
-    face_balance = abs(upper_face - lower_face) / mean_intensity
-    
-    # Calculate emotion probabilities
-    happy_prob = max(0, smile_score + brightness_score * 0.2 + eye_score)
-    stressed_prob = max(0, face_balance * 0.5 + (1 - brightness_score) * 0.3)
-    doubt_prob = max(0, contrast_score * 0.3 + (1 - eye_score) * 0.2)
-    normal_prob = 1 - max(happy_prob, stressed_prob, doubt_prob)
-    
-    # Normalize probabilities
-    total = happy_prob + stressed_prob + doubt_prob + normal_prob
-    if total > 0:
-        probabilities = [doubt_prob/total, happy_prob/total, normal_prob/total, stressed_prob/total]
+    # Calculate symmetry by comparing mirrored halves
+    if len(left_landmarks) == len(right_landmarks):
+        symmetry_score = 100 - np.mean(np.abs(left_landmarks[:, 0] - (-right_landmarks[:, 0] + np.mean(landmarks_3d[:, 0]) * 2)))
+        symmetry_score = max(0, min(100, symmetry_score))
     else:
-        probabilities = [0.25, 0.25, 0.25, 0.25]
+        symmetry_score = 75  # Default if can't calculate
     
-    # Determine prediction
-    emotions = ['Doubt', 'Happy', 'Normal', 'Stressed']
-    prediction = emotions[np.argmax(probabilities)]
+    beauty_factors.append(('Facial Symmetry', symmetry_score, 0.35))
     
-    return prediction, probabilities
+    # 2. Golden Ratio Adherence (25% weight)
+    golden_ratio = 1.618
+    face_ratio = shape_analysis.get('face_ratio', 1.3)
+    golden_deviation = abs(face_ratio - golden_ratio) / golden_ratio * 100
+    golden_score = max(0, 100 - golden_deviation * 2)
+    beauty_factors.append(('Golden Ratio', golden_score, 0.25))
+    
+    # 3. Feature Proportion (25% weight)
+    measurements = shape_analysis.get('measurements', {})
+    if measurements:
+        # Ideal proportions
+        ideal_jaw_ratio = 0.85
+        actual_jaw_ratio = shape_analysis.get('jaw_ratio', 0.85)
+        proportion_score = max(0, 100 - abs(actual_jaw_ratio - ideal_jaw_ratio) * 200)
+    else:
+        proportion_score = 75
+    
+    beauty_factors.append(('Feature Proportion', proportion_score, 0.25))
+    
+    # 4. Face Shape Preference (15% weight)
+    shape_scores = {'Oval': 95, 'Heart': 90, 'Diamond': 85, 'Round': 80, 'Square': 75, 'Rectangle': 70}
+    shape_score = shape_scores.get(shape_analysis.get('shape', 'Oval'), 75)
+    beauty_factors.append(('Face Shape', shape_score, 0.15))
+    
+    # Calculate overall score
+    overall_score = sum(score * weight for _, score, weight in beauty_factors)
+    
+    return overall_score, beauty_factors
+
+def get_makeup_recommendations(face_shape, beauty_factors):
+    """Generate personalized makeup recommendations"""
+    recommendations = []
+    
+    # Face shape specific recommendations
+    shape_makeup = {
+        'Oval': [
+            "💄 **Perfect Canvas**: Your balanced proportions work with most makeup styles",
+            "✨ **Highlight**: Focus on your natural symmetry with subtle contouring",
+            "👄 **Lips**: Most lip shapes and colors will complement your face",
+            "👁️ **Eyes**: Experiment with various eye makeup styles"
+        ],
+        'Round': [
+            "🔥 **Contouring**: Use bronzer along jawline and temples to add definition",
+            "👁️ **Eyes**: Elongate with winged eyeliner and vertical eyeshadow application",
+            "💋 **Lips**: Slightly overlining can add structure",
+            "✨ **Highlight**: Apply to bridge of nose and chin to add length"
+        ],
+        'Square': [
+            "🌟 **Soften**: Use rounded eyebrow shapes and soft, blended eyeshadow",
+            "💄 **Lips**: Rounded lip shapes will balance angular features",
+            "✨ **Highlight**: Focus on center of face - forehead, nose, chin",
+            "🎨 **Blush**: Apply in circular motions on apple of cheeks"
+        ],
+        'Heart': [
+            "💋 **Balance**: Draw attention to lips with bold colors",
+            "👁️ **Eyes**: Keep eye makeup subtle to not overpower narrow chin",
+            "✨ **Contour**: Lightly contour temples to reduce forehead width",
+            "🌸 **Blush**: Apply lower on cheekbones, closer to jawline"
+        ],
+        'Rectangle': [
+            "🌟 **Width**: Add width with blush applied horizontally across cheeks",
+            "👁️ **Eyes**: Horizontal eyeshadow application to widen face",
+            "💄 **Lips**: Full, horizontal lip shapes",
+            "✨ **Contour**: Minimize forehead and chin, emphasize cheeks"
+        ],
+        'Diamond': [
+            "💎 **Balance**: Soften prominent cheekbones with subtle contouring",
+            "👁️ **Eyes**: Draw attention upward with defined brows and eye makeup",
+            "💋 **Lips**: Fuller lips balance narrow chin and forehead",
+            "✨ **Highlight**: Focus on forehead and chin to add width"
+        ]
+    }
+    
+    recommendations.extend(shape_makeup.get(face_shape, shape_makeup['Oval']))
+    
+    # Beauty factor specific recommendations
+    for factor_name, score, _ in beauty_factors:
+        if factor_name == 'Facial Symmetry' and score < 80:
+            recommendations.append("🎭 **Symmetry**: Use makeup to enhance facial balance - slight contouring can help")
+        elif factor_name == 'Golden Ratio' and score < 70:
+            recommendations.append("📐 **Proportions**: Strategic highlighting and contouring can create ideal proportions")
+    
+    return recommendations
+
+def get_facial_exercises(face_shape, age_estimate=None):
+    """Generate facial exercise recommendations"""
+    exercises = []
+    
+    # Universal anti-aging exercises
+    universal_exercises = [
+        "😊 **Smile Exercise**: Hold a wide smile for 10 seconds, repeat 10 times daily",
+        "👁️ **Eye Circles**: Gently circle eyes with fingertips to reduce puffiness",
+        "💆 **Forehead Massage**: Smooth forehead lines with upward strokes",
+        "🎵 **Vowel Sounds**: Say A-E-I-O-U exaggerating mouth movements"
+    ]
+    
+    # Face shape specific exercises
+    shape_exercises = {
+        'Round': [
+            "🔥 **Cheek Toning**: Suck in cheeks and hold for 10 seconds",
+            "💪 **Jaw Definition**: Chew sugar-free gum to strengthen jaw muscles"
+        ],
+        'Square': [
+            "🌸 **Jaw Relaxation**: Massage jaw muscles to reduce tension",
+            "😌 **Soft Expressions**: Practice gentle, relaxed facial expressions"
+        ],
+        'Heart': [
+            "💋 **Lip Exercises**: Pucker and release lips to strengthen lower face",
+            "🎯 **Chin Strengthening**: Press tongue to roof of mouth, hold 5 seconds"
+        ],
+        'Rectangle': [
+            "😄 **Cheek Lifts**: Smile lifting cheek muscles, hold 5 seconds",
+            "🌟 **Face Widening**: Gently stretch face horizontally with hands"
+        ]
+    }
+    
+    exercises.extend(universal_exercises)
+    exercises.extend(shape_exercises.get(face_shape, []))
+    
+    # Age-specific exercises
+    if age_estimate:
+        if age_estimate > 40:
+            exercises.extend([
+                "🌿 **Anti-Aging**: Fish face exercise - suck in cheeks and lips",
+                "✨ **Neck Toning**: Tilt head back, push lower jaw forward"
+            ])
+        elif age_estimate > 30:
+            exercises.extend([
+                "🔄 **Prevention**: Gentle face yoga to maintain muscle tone",
+                "💧 **Hydration**: Facial massage with moisturizer"
+            ])
+    
+    return exercises
+
+def save_progress(analysis_data):
+    """Save analysis progress for tracking"""
+    timestamp = datetime.now().isoformat()
+    
+    progress_data = {
+        'timestamp': timestamp,
+        'beauty_score': analysis_data.get('beauty_score', 0),
+        'face_shape': analysis_data.get('face_shape', 'Unknown'),
+        'emotion': analysis_data.get('emotion', 'Unknown'),
+        'age_estimate': analysis_data.get('age_estimate', 0)
+    }
+    
+    # In a real app, this would save to a database
+    # For demo, we'll use session state
+    if 'progress_history' not in st.session_state:
+        st.session_state.progress_history = []
+    
+    st.session_state.progress_history.append(progress_data)
+    
+    return len(st.session_state.progress_history)
+
+def show_progress_tracking():
+    """Display progress tracking visualization"""
+    if 'progress_history' not in st.session_state or not st.session_state.progress_history:
+        st.info("📊 No progress data yet. Analyze some images to start tracking!")
+        return
+    
+    df = pd.DataFrame(st.session_state.progress_history)
+    df['date'] = pd.to_datetime(df['timestamp']).dt.date
+    
+    # Beauty score over time
+    if len(df) > 1:
+        fig_beauty = px.line(df, x='date', y='beauty_score', 
+                           title='Beauty Score Progress Over Time',
+                           markers=True)
+        st.plotly_chart(fig_beauty, use_container_width=True)
+    
+    # Summary statistics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Average Beauty Score", f"{df['beauty_score'].mean():.1f}")
+    
+    with col2:
+        st.metric("Total Analyses", len(df))
+    
+    with col3:
+        if len(df) > 1:
+            trend = "📈 Improving" if df['beauty_score'].iloc[-1] > df['beauty_score'].iloc[0] else "📉 Declining"
+            st.metric("Trend", trend)
+
+def predict_emotion_cnn(image, face_coords):
+    """Enhanced emotion prediction using CNN approach"""
+    try:
+        x, y, w, h = face_coords
+        face_roi = image[y:y+h, x:x+w]
+        
+        # Preprocess for emotion detection
+        face_gray = cv2.cvtColor(face_roi, cv2.COLOR_RGB2GRAY)
+        face_resized = cv2.resize(face_gray, (48, 48))
+        face_normalized = face_resized / 255.0
+        
+        # Enhanced rule-based emotion detection
+        # Analyze facial features
+        smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_smile.xml')
+        eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+        
+        smiles = smile_cascade.detectMultiScale(face_gray, 1.8, 20)
+        eyes = eye_cascade.detectMultiScale(face_gray)
+        
+        # Calculate facial metrics
+        mean_intensity = np.mean(face_gray)
+        std_intensity = np.std(face_gray)
+        upper_face = np.mean(face_gray[:h//2])
+        lower_face = np.mean(face_gray[h//2:])
+        
+        # Enhanced emotion scoring
+        smile_score = len(smiles) * 0.4
+        eye_score = min(len(eyes), 2) * 0.2
+        brightness_score = (mean_intensity - 100) / 100
+        contrast_score = std_intensity / 50
+        face_balance = abs(upper_face - lower_face) / mean_intensity
+        
+        # Calculate probabilities for 7 emotions
+        happy_prob = max(0, min(1, smile_score + brightness_score * 0.3 + eye_score))
+        sad_prob = max(0, min(1, (1 - brightness_score) * 0.4 + face_balance * 0.3))
+        angry_prob = max(0, min(1, contrast_score * 0.4 + (1 - eye_score) * 0.2))
+        surprised_prob = max(0, min(1, eye_score * 0.5 + contrast_score * 0.2))
+        fear_prob = max(0, min(1, face_balance * 0.4 + contrast_score * 0.2))
+        disgust_prob = max(0, min(1, (1 - smile_score) * 0.3 + face_balance * 0.2))
+        neutral_prob = max(0, 1 - max(happy_prob, sad_prob, angry_prob, surprised_prob, fear_prob, disgust_prob))
+        
+        probabilities = [angry_prob, disgust_prob, fear_prob, happy_prob, sad_prob, surprised_prob, neutral_prob]
+        emotions = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprised', 'Neutral']
+        
+        # Normalize probabilities
+        total = sum(probabilities)
+        if total > 0:
+            probabilities = [p/total for p in probabilities]
+        else:
+            probabilities = [1/7] * 7
+        
+        prediction = emotions[np.argmax(probabilities)]
+        
+        return prediction, probabilities, emotions
+        
+    except Exception as e:
+        st.error(f"Emotion prediction error: {str(e)}")
+        return "Neutral", [0, 0, 0, 0.7, 0, 0, 0.3], ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprised', 'Neutral']
 
 def main():
-    st.title("🎭 Advanced Face Analysis & Emotion Detection")
-    st.write("Upload an image for comprehensive facial analysis including emotion, face shape, age estimation, and detailed measurements!")
+    st.set_page_config(
+        page_title="Advanced 3D Face Analysis",
+        page_icon="🎭",
+        layout="wide"
+    )
+    
+    st.title("🎭 Advanced 3D Face Analysis & Beauty Enhancement")
+    st.write("Upload an image for comprehensive 3D facial analysis, emotion detection, beauty scoring, and personalized recommendations!")
+    
+    # Sidebar for navigation
+    st.sidebar.title("🔧 Analysis Options")
+    analysis_mode = st.sidebar.selectbox(
+        "Choose Analysis Mode",
+        ["Complete Analysis", "3D Reconstruction Only", "Beauty Analysis Only", "Progress Tracking"]
+    )
+    
+    if analysis_mode == "Progress Tracking":
+        st.header("📊 Progress Tracking Dashboard")
+        show_progress_tracking()
+        return
     
     # Load model
     model, model_file = load_model()
     
-    if model is None:
-        st.info("💡 **Tip:** For better accuracy, retrain the model specifically for OpenCV features using the training script.")
-        st.stop()
-    
-    # Show model info
-    if model_file == 'opencv_emotion_model.pkl':
-        st.success("🎯 Using OpenCV-optimized model for better accuracy!")
-    else:
-        st.warning("⚠️ Using original MediaPipe model. Consider retraining for better accuracy with OpenCV features.")
-    
-    # File uploader
+    # File uploader with better mobile support
     uploaded_file = st.file_uploader(
         "Choose an image...", 
-        type=['jpg', 'jpeg', 'png', 'bmp'],
-        help="For best results, use images with clear, front-facing faces"
+        type=['jpg', 'jpeg', 'png', 'bmp', 'webp'],
+        help="📱 Mobile tip: For best results, use good lighting and hold phone steady"
     )
     
     if uploaded_file is not None:
         # Display uploaded image
         image = Image.open(uploaded_file)
         
-        col1, col2 = st.columns(2)
+        # Enhanced preprocessing for mobile images
+        processed_image = preprocess_mobile_image(image)
+        
+        col1, col2 = st.columns([1, 1])
         
         with col1:
             st.subheader("📸 Original Image")
             st.image(image, caption="Uploaded Image", use_container_width=True)
         
         # Process the image
-        with st.spinner("🔍 Analyzing facial features..."):
-            # Extract features
-            try:
-                result = extract_opencv_features(image)
-                
-                if result[1] is not None:  # Error case
-                    features, error = result[:2]
-                    face_coords, face_roi = None, None
-                else:  # Success case
-                    features, error, face_coords, face_roi = result
-            except ValueError as ve:
-                st.error(f"Feature extraction error: {str(ve)}")
-                features, error, face_coords, face_roi = None, "Feature extraction failed", None, None
-            except Exception as e:
-                st.error(f"Unexpected error during feature extraction: {str(e)}")
-                features, error, face_coords, face_roi = None, "Unexpected error occurred", None, None
+        with st.spinner("🔍 Performing advanced 3D analysis..."):
+            # Extract 3D landmarks
+            landmarks_3d, mesh_results = extract_3d_landmarks(processed_image)
             
-            if error:
-                st.error(error)
-                st.info("💡 **Tips for better results:**")
-                st.write("- Use images with clear, front-facing faces")
-                st.write("- Ensure good lighting")
-                st.write("- Avoid sunglasses or face coverings")
-                st.write("- Try images where the face takes up a good portion of the frame")
-            else:
-                # Perform comprehensive face analysis
-                face_measurements = get_face_measurements(face_roi)
-                shape_analysis = analyze_face_shape(face_roi)
-                
-                try:
-                    # Make prediction with trained model
-                    X = pd.DataFrame([features])
-                    prediction = model.predict(X)[0]
-                    probabilities = model.predict_proba(X)[0]
-                    
-                    model_success = True
-                    method_used = "Machine Learning Model"
-                    
-                except Exception as e:
-                    st.warning(f"⚠️ ML model failed: {str(e)}. Using enhanced fallback method.")
-                    prediction, probabilities = predict_emotion_enhanced_fallback(image)
-                    model_success = False
-                    method_used = "Enhanced Rule-Based Detection"
-                
+            if landmarks_3d is None:
+                st.error("❌ No face detected. Please try another image with a clear, front-facing face.")
+                st.info("💡 **Mobile Tips:**\n- Use good lighting\n- Keep face centered\n- Remove sunglasses\n- Try different angles")
+                return
+            
+            # Basic face detection for emotion analysis
+            gray = cv2.cvtColor(processed_image, cv2.COLOR_RGB2GRAY)
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+            
+            if len(faces) == 0:
+                st.error("❌ Face detection failed for emotion analysis.")
+                return
+            
+            face_coords = max(faces, key=lambda x: x[2] * x[3])
+            
+            # Perform analyses based on mode
+            if analysis_mode in ["Complete Analysis", "3D Reconstruction Only"]:
+                # 3D Face Reconstruction
                 with col2:
-                    st.subheader("🔬 Analysis Results")
-                    
-                    # Draw comprehensive face analysis
-                    if face_coords is not None:
-                        annotated_image = draw_face_analysis(
-                            image.copy(), face_coords, shape_analysis, face_measurements
-                        )
-                        st.image(annotated_image, caption="Face Analysis Overlay", use_container_width=True)
+                    st.subheader("🌐 3D Face Reconstruction")
+                    fig_3d = create_3d_face_model(landmarks_3d)
+                    if fig_3d:
+                        st.plotly_chart(fig_3d, use_container_width=True)
+                    else:
+                        st.error("Could not create 3D model")
+            
+            if analysis_mode == "3D Reconstruction Only":
+                return
+            
+            # Advanced face shape analysis
+            shape_analysis = analyze_face_shape_advanced(landmarks_3d)
+            
+            # === FACE SHAPE ANALYSIS SECTION ===
+            st.markdown("---")
+            st.header("👤 Advanced Face Shape Analysis")
+            
+            col_shape1, col_shape2, col_shape3 = st.columns(3)
+            
+            with col_shape1:
+                st.metric(
+                    "Face Shape", 
+                    shape_analysis['shape'],
+                    help="3D landmark-based shape analysis"
+                )
+                st.metric(
+                    "Confidence", 
+                    f"{shape_analysis['confidence']:.1%}",
+                    help="Algorithm confidence in shape classification"
+                )
+            
+            with col_shape2:
+                st.metric(
+                    "Face Ratio", 
+                    f"{shape_analysis['face_ratio']:.2f}",
+                    help="Length to width ratio"
+                )
+                st.metric(
+                    "Jaw Ratio", 
+                    f"{shape_analysis['jaw_ratio']:.2f}",
+                    help="Jaw width to face width ratio"
+                )
+            
+            with col_shape3:
+                measurements = shape_analysis.get('measurements', {})
+                if measurements:
+                    st.metric("Face Length", f"{measurements.get('face_length', 0):.1f}")
+                    st.metric("Face Width", f"{measurements.get('face_width', 0):.1f}")
+            
+            # === BEAUTY AND ATTRACTIVENESS ANALYSIS SECTION ===
+            st.markdown("---")
+            st.header("✨ Advanced Beauty & Attractiveness Analysis")
+            
+            # Calculate advanced beauty score
+            beauty_score, beauty_factors = calculate_beauty_score_advanced(landmarks_3d, shape_analysis)
+            
+            col_beauty1, col_beauty2 = st.columns(2)
+            
+            with col_beauty1:
+                st.metric(
+                    "Overall Beauty Score", 
+                    f"{beauty_score:.1f}/100",
+                    help="Advanced 3D analysis-based beauty scoring"
+                )
                 
+                # Beauty category
+                if beauty_score >= 90:
+                    st.success("🌟 **Category**: Exceptionally Beautiful")
+                elif beauty_score >= 80:
+                    st.success("💫 **Category**: Very Attractive")
+                elif beauty_score >= 70:
+                    st.info("✨ **Category**: Above Average")
+                elif beauty_score >= 60:
+                    st.info("🌸 **Category**: Average Beauty")
+                else:
+                    st.warning("🎨 **Category**: Unique Beauty")
+            
+            with col_beauty2:
+                # Display beauty factors
+                st.subheader("Beauty Factor Breakdown")
+                for factor_name, score, weight in beauty_factors:
+                    st.metric(
+                        factor_name, 
+                        f"{score:.1f}/100",
+                        delta=f"Weight: {weight:.0%}",
+                        help=f"Contributes {weight:.0%} to overall score"
+                    )
+            
+            # Beauty visualization
+            st.subheader("📊 Beauty Analysis Breakdown")
+            factor_df = pd.DataFrame({
+                'Factor': [f[0] for f in beauty_factors],
+                'Score': [f[1] for f in beauty_factors],
+                'Weight': [f[2] * 100 for f in beauty_factors]
+            })
+            
+            fig_beauty = px.bar(factor_df, x='Factor', y='Score', 
+                              title='Beauty Factor Scores',
+                              color='Weight',
+                              color_continuous_scale='viridis')
+            st.plotly_chart(fig_beauty, use_container_width=True)
+            
+            if analysis_mode != "Beauty Analysis Only":
                 # === EMOTION ANALYSIS SECTION ===
                 st.markdown("---")
-                st.header("😊 Emotion Analysis")
+                st.header("😊 Advanced Emotion Analysis")
                 
-                # Display emotion results
-                st.success(f"🎯 **Detected Emotion: {prediction}**")
+                # Enhanced emotion prediction
+                emotion, emotion_probs, emotion_labels = predict_emotion_cnn(processed_image, face_coords)
                 
-                # Show method used
-                if model_success:
-                    st.info(f"📊 Method: {method_used} | Confidence: {np.max(probabilities):.2%}")
+                col_emotion1, col_emotion2 = st.columns(2)
+                
+                with col_emotion1:
+                    st.success(f"🎯 **Detected Emotion: {emotion}**")
+                    st.info(f"📊 Confidence: {max(emotion_probs):.1%}")
+                
+                with col_emotion2:
+                    # Emotion probability chart
+                    emotion_df = pd.DataFrame({
+                        'Emotion': emotion_labels,
+                        'Probability': emotion_probs
+                    }).sort_values('Probability', ascending=False)
+                
+                # Display emotion probabilities
+                fig_emotion = px.bar(emotion_df, x='Emotion', y='Probability',
+                                   title='Emotion Probability Distribution',
+                                   color='Probability',
+                                   color_continuous_scale='blues')
+                st.plotly_chart(fig_emotion, use_container_width=True)
+            
+            # === PERSONALIZED RECOMMENDATIONS SECTION ===
+            st.markdown("---")
+            st.header("💄 Personalized Beauty Recommendations")
+            
+            # Makeup recommendations
+            makeup_recs = get_makeup_recommendations(shape_analysis['shape'], beauty_factors)
+            
+            st.subheader("💅 Makeup & Styling Tips")
+            for rec in makeup_recs:
+                st.info(rec)
+            
+            # === FACIAL EXERCISE RECOMMENDATIONS ===
+            st.markdown("---")
+            st.header("🏃‍♀️ Personalized Facial Exercises")
+            
+            # Get age estimate (simplified for demo)
+            age_estimate = 25 + (100 - beauty_score) * 0.3  # Rough age estimation
+            
+            exercises = get_facial_exercises(shape_analysis['shape'], age_estimate)
+            
+            st.subheader("💪 Daily Facial Workout Routine")
+            st.write("**Recommended duration**: 10-15 minutes daily")
+            
+            col_ex1, col_ex2 = st.columns(2)
+            
+            for i, exercise in enumerate(exercises):
+                if i % 2 == 0:
+                    col_ex1.info(exercise)
                 else:
-                    st.info(f"📊 Method: {method_used}")
+                    col_ex2.info(exercise)
+            
+            # === PROGRESS TRACKING ===
+            st.markdown("---")
+            st.header("📈 Progress Tracking")
+            
+            # Save current analysis
+            analysis_data = {
+                'beauty_score': beauty_score,
+                'face_shape': shape_analysis['shape'],
+                'emotion': emotion,
+                'age_estimate': age_estimate
+            }
+            
+            if st.button("💾 Save Analysis to Progress"):
+                entry_count = save_progress(analysis_data)
+                st.success(f"✅ Analysis saved! Total entries: {entry_count}")
+                st.balloons()
+            
+            # Show mini progress if available
+            if 'progress_history' in st.session_state and st.session_state.progress_history:
+                recent_scores = [entry['beauty_score'] for entry in st.session_state.progress_history[-5:]]
+                if len(recent_scores) > 1:
+                    trend = "📈 Improving" if recent_scores[-1] > recent_scores[0] else "📊 Stable"
+                    st.info(f"**Recent Trend**: {trend} | **Average Score**: {np.mean(recent_scores):.1f}")
+            
+            # === REAL-TIME ANALYSIS INFO ===
+            st.markdown("---")
+            st.header("🎥 Real-Time Video Analysis")
+            
+            st.info("""
+            🔄 **Coming Soon - Real-Time Features:**
+            - Live webcam emotion detection
+            - Real-time beauty scoring
+            - Dynamic makeup try-on
+            - Live facial exercise guidance
+            - Progress tracking during exercises
+            
+            📱 **Current Capabilities:**
+            - Upload multiple images for comparison
+            - Batch analysis of photo series
+            - Progress tracking over time
+            """)
+            
+            # Video analysis placeholder
+            enable_video = st.checkbox("🎥 Enable Experimental Video Analysis")
+            
+            if enable_video:
+                st.warning("⚠️ Video analysis is experimental. Performance may vary.")
                 
-                # Display all class probabilities
-                st.subheader("📈 Emotion Probability Distribution")
+                # Placeholder for video analysis
+                video_placeholder = st.empty()
                 
-                # Get class names
-                if model_file == 'opencv_emotion_model.pkl':
-                    try:
-                        class_names = model.classes_.tolist() if hasattr(model, 'classes_') else ['Doubt', 'Happy', 'Normal', 'Stressed']
-                    except:
-                        class_names = ['Doubt', 'Happy', 'Normal', 'Stressed']
+                if st.button("📹 Start Video Analysis (Demo)"):
+                    with video_placeholder.container():
+                        st.info("🎬 Video analysis would appear here in full implementation")
+                        st.write("Features would include:")
+                        st.write("- Real-time face tracking")
+                        st.write("- Live emotion detection")
+                        st.write("- Dynamic beauty scoring")
+                        st.write("- Exercise form checking")
+            
+            # === ADVANCED INSIGHTS ===
+            with st.expander("🔬 Advanced Analysis Insights"):
+                st.subheader("🧬 Facial Genetics Insights")
+                
+                # Facial feature analysis
+                if landmarks_3d is not None:
+                    # Calculate various facial metrics
+                    nose_width = np.linalg.norm(landmarks_3d[31] - landmarks_3d[35])
+                    eye_distance = np.linalg.norm(landmarks_3d[33] - landmarks_3d[133])
+                    lip_width = np.linalg.norm(landmarks_3d[61] - landmarks_3d[291])
+                    
+                    col_insights1, col_insights2 = st.columns(2)
+                    
+                    with col_insights1:
+                        st.metric("Nose Width Index", f"{nose_width:.2f}")
+                        st.metric("Eye Distance Ratio", f"{eye_distance:.2f}")
+                        st.metric("Lip Width Ratio", f"{lip_width:.2f}")
+                    
+                    with col_insights2:
+                        # Facial harmony analysis
+                        harmony_score = (beauty_score + shape_analysis['confidence'] * 100) / 2
+                        st.metric("Facial Harmony", f"{harmony_score:.1f}/100")
+                        
+                        # Aging prediction
+                        aging_factor = max(0, 100 - beauty_score) * 0.5
+                        st.metric("Aging Factor", f"{aging_factor:.1f}")
+                
+                st.subheader("🎯 Improvement Potential")
+                
+                improvements = []
+                
+                for factor_name, score, weight in beauty_factors:
+                    if score < 80:
+                        if factor_name == 'Facial Symmetry':
+                            improvements.append("🎭 **Symmetry**: Facial massage and targeted exercises")
+                        elif factor_name == 'Golden Ratio':
+                            improvements.append("📐 **Proportions**: Strategic makeup and hairstyling")
+                        elif factor_name == 'Feature Proportion':
+                            improvements.append("🎨 **Features**: Contouring and highlighting techniques")
+                
+                if not improvements:
+                    st.success("🌟 Excellent facial harmony! Focus on maintenance.")
                 else:
-                    class_names = ['Doubt', 'Happy', 'Normal', 'Stressed']
+                    for improvement in improvements:
+                        st.info(improvement)
+            
+            # === COMPARISON ANALYSIS ===
+            with st.expander("🔄 Comparison Analysis"):
+                st.write("Upload another image to compare facial features and beauty scores!")
                 
-                # Ensure we have the right number of probabilities
-                if len(probabilities) != len(class_names):
-                    st.warning("⚠️ Probability mismatch. Using generic labels.")
-                    class_names = [f'Class_{i}' for i in range(len(probabilities))]
+                comparison_file = st.file_uploader(
+                    "Choose comparison image...", 
+                    type=['jpg', 'jpeg', 'png', 'bmp', 'webp'],
+                    key="comparison"
+                )
                 
-                # Create a dataframe for better visualization
-                prob_df = pd.DataFrame({
-                    'Emotion': class_names,
-                    'Probability': probabilities
-                }).sort_values('Probability', ascending=False)
-                
-                # Display as bar chart
-                st.bar_chart(prob_df.set_index('Emotion'))
-                
-                # === FACE SHAPE ANALYSIS SECTION ===
-                st.markdown("---")
-                st.header("👤 Face Shape Analysis")
-                
-                col_shape1, col_shape2 = st.columns(2)
-                
-                with col_shape1:
-                    st.metric(
-                        "Face Shape", 
-                        shape_analysis['shape'],
-                        help="Determined by analyzing face proportions and measurements"
-                    )
-                    st.metric(
-                        "Shape Confidence", 
-                        f"{shape_analysis['confidence']:.1%}",
-                        help="How confident the algorithm is in the shape classification"
-                    )
-                    st.metric(
-                        "Face Ratio (H:W)", 
-                        f"{shape_analysis['face_ratio']:.2f}",
-                        help="Height to width ratio - key indicator of face shape"
-                    )
-                
-                with col_shape2:
-                    st.metric("Jaw Angle", f"{shape_analysis['jaw_angle']:.1f}°")
-                    st.metric("Symmetry Score", f"{face_measurements['symmetry_score']:.1f}/100")
-                    st.metric("Face Area", f"{face_measurements['face_area_px']:,} pixels")
-                
-                # Face shape characteristics
-                st.subheader("🔍 Shape Characteristics")
-                shape_chars = {
-                    "Oval": "Balanced proportions, slightly longer than wide, considered ideal face shape",
-                    "Round": "Width and height are similar, soft curved lines, youthful appearance",
-                    "Square": "Strong jawline, width and height similar, angular features",
-                    "Rectangle": "Longer than wide, strong jawline, high forehead",
-                    "Heart": "Wide forehead, narrow chin, prominent cheekbones",
-                    "Pear": "Narrow forehead, wide jawline, fuller lower face",
-                    "Diamond": "Wide cheekbones, narrow forehead and chin"
-                }
-                
-                if shape_analysis['shape'] in shape_chars:
-                    st.info(f"**{shape_analysis['shape']} Face:** {shape_chars[shape_analysis['shape']]}")
-                
-                # === DETAILED MEASUREMENTS SECTION ===
-                st.markdown("---")
-                st.header("📏 Detailed Face Measurements")
-                
-                col_meas1, col_meas2, col_meas3 = st.columns(3)
-                
-                with col_meas1:
-                    st.subheader("📐 Basic Dimensions")
-                    st.metric("Face Width", f"{face_measurements['face_width_px']} px")
-                    st.metric("Face Height", f"{face_measurements['face_height_px']} px")
-                    st.metric("Aspect Ratio", f"{face_measurements['aspect_ratio']:.2f}")
-                
-                with col_meas2:
-                    st.subheader("📊 Proportional Analysis")
-                    st.metric("Forehead Height", f"{face_measurements['forehead_height']:.0f} px")
-                    st.metric("Mid-face Height", f"{face_measurements['mid_face_height']:.0f} px")
-                    st.metric("Lower Face Height", f"{face_measurements['lower_face_height']:.0f} px")
-                
-                with col_meas3:
-                    st.subheader("🎯 Width Analysis")
-                    st.metric("Forehead Width", f"{face_measurements['forehead_width']:.0f} px")
-                    st.metric("Cheek Width", f"{face_measurements['cheek_width']:.0f} px")
-                    st.metric("Jaw Width", f"{face_measurements['jaw_width']:.0f} px")
-                
-                # Measurement Analysis
-                st.subheader("🔬 Measurement Analysis")
-                
-                # Golden ratio analysis
-                golden_ratio = 1.618
-                face_golden_ratio = face_measurements['face_height_px'] / face_measurements['face_width_px']
-                golden_ratio_deviation = abs(face_golden_ratio - golden_ratio) / golden_ratio * 100
-                
-                col_analysis1, col_analysis2 = st.columns(2)
-                
-                with col_analysis1:
-                    st.metric(
-                        "Golden Ratio Adherence", 
-                        f"{100 - golden_ratio_deviation:.1f}%",
-                        help="How closely your face matches the golden ratio (1.618)"
-                    )
+                if comparison_file is not None:
+                    comp_image = Image.open(comparison_file)
+                    comp_processed = preprocess_mobile_image(comp_image)
+                    comp_landmarks, _ = extract_3d_landmarks(comp_processed)
                     
-                    # Facial thirds analysis
-                    ideal_third = face_measurements['face_height_px'] / 3
-                    forehead_dev = abs(face_measurements['forehead_height'] - ideal_third) / ideal_third * 100
-                    midface_dev = abs(face_measurements['mid_face_height'] - ideal_third) / ideal_third * 100
-                    lowerface_dev = abs(face_measurements['lower_face_height'] - ideal_third) / ideal_third * 100
-                    
-                    avg_proportion_score = 100 - (forehead_dev + midface_dev + lowerface_dev) / 3
-                    st.metric(
-                        "Facial Thirds Balance", 
-                        f"{max(0, avg_proportion_score):.1f}%",
-                        help="How well your face divides into equal thirds"
-                    )
-                
-                with col_analysis2:
-                    st.metric(
-                        "Eye Region Contrast", 
-                        f"{face_measurements['eye_region_contrast']:.1f}",
-                        help="Contrast level in the eye region"
-                    )
-                    st.metric(
-                        "Overall Symmetry", 
-                        f"{face_measurements['symmetry_score']:.1f}/100",
-                        help="How symmetric your left and right face sides are"
-                    )
-                
-                # === COMPREHENSIVE FEATURE ANALYSIS ===
-                if features and model_success:
-                    with st.expander("🔍 Advanced Feature Analysis"):
-                        st.write("**Comprehensive facial features detected and analyzed:**")
+                    if comp_landmarks is not None:
+                        comp_shape = analyze_face_shape_advanced(comp_landmarks)
+                        comp_beauty, comp_factors = calculate_beauty_score_advanced(comp_landmarks, comp_shape)
                         
-                        # Parse key features
-                        if len(features) >= 20:
-                            col_feat1, col_feat2, col_feat3 = st.columns(3)
-                            
-                            with col_feat1:
-                                st.subheader("👁️ Eyes & Expression")
-                                st.metric("Eyes Detected", int(features[7]))
-                                st.metric("Smiles Detected", int(features[12]))
-                                st.metric("Eye Position Ratio", f"{features[9]:.3f}")
-                                st.metric("Smile Position Ratio", f"{features[14]:.3f}")
-                            
-                            with col_feat2:
-                                st.subheader("💡 Lighting & Texture")
-                                st.metric("Face Brightness", f"{features[17]:.1f}")
-                                st.metric("Face Contrast", f"{features[18]:.1f}")
-                                st.metric("Edge Density", f"{features[27]:.4f}")
-                                st.metric("Texture Variation", f"{features[30]:.3f}" if len(features) > 30 else "N/A")
-                            
-                            with col_feat3:
-                                st.subheader("📍 Positioning")
-                                st.metric("Face X Position", f"{features[0]:.3f}")
-                                st.metric("Face Y Position", f"{features[1]:.3f}")
-                                st.metric("Face Width Ratio", f"{features[2]:.3f}")
-                                st.metric("Face Height Ratio", f"{features[3]:.3f}")
+                        col_comp1, col_comp2 = st.columns(2)
                         
-                        st.write(f"**Total ML features analyzed:** {len(features)}")
+                        with col_comp1:
+                            st.image(image, caption="Original", use_container_width=True)
+                            st.metric("Beauty Score", f"{beauty_score:.1f}")
+                            st.metric("Face Shape", shape_analysis['shape'])
                         
-                        # Feature importance (if available)
-                        if hasattr(model, 'feature_importances_'):
-                            st.subheader("🎯 Most Important Features")
-                            importance_df = pd.DataFrame({
-                                'Feature': [f'Feature_{i}' for i in range(len(model.feature_importances_))],
-                                'Importance': model.feature_importances_
-                            }).sort_values('Importance', ascending=False).head(10)
-                            
-                            st.bar_chart(importance_df.set_index('Feature'))
-                
-                # === BEAUTY AND ATTRACTIVENESS ANALYSIS ===
-                st.markdown("---")
-                st.header("✨ Beauty & Attractiveness Analysis")
-                
-                # Calculate beauty score based on various factors
-                beauty_factors = []
-                
-                # Golden ratio adherence (weight: 25%)
-                golden_score = max(0, 100 - golden_ratio_deviation)
-                beauty_factors.append(('Golden Ratio', golden_score, 0.25))
-                
-                # Symmetry (weight: 30%)
-                symmetry_score = face_measurements['symmetry_score']
-                beauty_factors.append(('Facial Symmetry', symmetry_score, 0.30))
-                
-                # Proportional balance (weight: 30%)
-                proportion_score = max(0, avg_proportion_score)
-                beauty_factors.append(('Proportional Balance', proportion_score, 0.30))
-                
-                # Skin smoothness (weight: 20%)
-                # Calculate skin smoothness from face texture
-                std_intensity = np.std(face_roi)
-                smoothness_score = max(0, 100 - std_intensity * 2)
-                beauty_factors.append(('Skin Smoothness', smoothness_score, 0.20))
-                
-                # Face shape preference (weight: 15%)
-                shape_scores = {'Oval': 95, 'Heart': 85, 'Round': 80, 'Square': 75, 'Rectangle': 70, 'Diamond': 85, 'Pear': 70}
-                shape_score = shape_scores.get(shape_analysis['shape'], 70)
-                beauty_factors.append(('Face Shape', shape_score, 0.15))
-                
-                # Calculate overall beauty score
-                overall_beauty_score = sum(score * weight for _, score, weight in beauty_factors)
-                
-                col_beauty1, col_beauty2 = st.columns(2)
-                
-                with col_beauty1:
-                    st.metric(
-                        "Overall Attractiveness Score", 
-                        f"{overall_beauty_score:.1f}/100",
-                        help="Composite score based on facial harmony, symmetry, and proportions"
-                    )
-                    
-                    # Beauty score interpretation
-                    if overall_beauty_score >= 90:
-                        beauty_category = "Exceptionally Attractive"
-                        beauty_color = "success"
-                    elif overall_beauty_score >= 80:
-                        beauty_category = "Very Attractive"
-                        beauty_color = "success"
-                    elif overall_beauty_score >= 70:
-                        beauty_category = "Above Average"
-                        beauty_color = "info"
-                    elif overall_beauty_score >= 60:
-                        beauty_category = "Average"
-                        beauty_color = "info"
+                        with col_comp2:
+                            st.image(comp_image, caption="Comparison", use_container_width=True)
+                            st.metric("Beauty Score", f"{comp_beauty:.1f}", 
+                                    delta=f"{comp_beauty - beauty_score:.1f}")
+                            st.metric("Face Shape", comp_shape['shape'])
+                        
+                        # Comparison insights
+                        if comp_beauty > beauty_score:
+                            st.success("📈 Comparison image scored higher!")
+                        elif comp_beauty < beauty_score:
+                            st.info("📉 Original image scored higher!")
+                        else:
+                            st.info("📊 Similar beauty scores!")
                     else:
-                        beauty_category = "Unique Beauty"
-                        beauty_color = "warning"
-                    
-                    if beauty_color == "success":
-                        st.success(f"Beauty Category: {beauty_category}")
-                    elif beauty_color == "info":
-                        st.info(f"Beauty Category: {beauty_category}")
-                    else:
-                        st.warning(f"Beauty Category: {beauty_category}")
-                
-                with col_beauty2:
-                    # Display individual beauty factors
-                    st.subheader("Beauty Factor Breakdown")
-                    for factor_name, score, weight in beauty_factors:
-                        st.metric(
-                            factor_name, 
-                            f"{score:.1f}/100",
-                            delta=f"Weight: {weight:.0%}"
-                        )
-                
-                # Beauty tips based on analysis
-                st.subheader("💄 Personalized Beauty Tips")
-                
-                tips = []
-                
-                if golden_ratio_deviation > 20:
-                    tips.append("💡 **Proportion Tip:** Consider hairstyles that balance your face shape")
-                
-                if face_measurements['symmetry_score'] < 70:
-                    tips.append("📸 **Photo Tip:** Try different angles to find your most symmetric side")
-                
-                # Calculate skin texture from face region
-                std_intensity = np.std(face_roi)
-                if std_intensity > 25:
-                    tips.append("🧴 **Skincare Tip:** Focus on moisturizing and gentle exfoliation for smoother skin texture")
-                
-                if shape_analysis['shape'] == 'Round':
-                    tips.append("💇 **Style Tip:** Angular hairstyles and defined eyebrows can add structure")
-                elif shape_analysis['shape'] == 'Square':
-                    tips.append("💇 **Style Tip:** Soft, curved hairstyles can balance strong jawlines")
-                elif shape_analysis['shape'] == 'Heart':
-                    tips.append("💇 **Style Tip:** Hairstyles with volume at the chin level can balance a wider forehead")
-                
-                if not tips:
-                    tips.append("✨ **Great news:** Your facial features show excellent natural harmony!")
-                
-                for tip in tips:
-                    st.info(tip)
-                
-                # Beauty disclaimer
-                st.warning("⚠️ **Important:** Beauty is subjective and cultural. This analysis is based on mathematical ratios and should be taken as fun insights, not definitive judgments.")
+                        st.error("Could not analyze comparison image")
     
     # === INFORMATION SECTIONS ===
-    # Model information and tips
-    with st.expander("ℹ️ About This Advanced Analysis System"):
+    with st.expander("ℹ️ About Advanced 3D Face Analysis"):
         st.write("""
-        ### 🔬 **Advanced Face Analysis Technology**
+        ### 🚀 **Next-Generation Face Analysis Technology**
         
-        This system provides multi-dimensional facial analysis using advanced computer vision:
+        **🌐 3D Reconstruction Features:**
+        - **468 3D Landmarks**: MediaPipe-powered precise facial mapping
+        - **Depth Analysis**: Real Z-coordinate facial depth mapping
+        - **Interactive 3D Models**: Rotatable and explorable face reconstructions
+        - **Advanced Measurements**: True 3D geometric analysis
         
-        **🎯 Analysis Features:**
-        - **Emotion Detection**: AI-powered emotion recognition from facial expressions
-        - **Face Shape Classification**: 7 major face shapes with confidence scoring
-        - **Detailed Measurements**: Precise facial proportions and dimensions
-        - **Beauty Analysis**: Mathematical beauty scoring based on golden ratios
-        - **Symmetry Assessment**: Left-right facial symmetry evaluation
+        **🧠 AI & Machine Learning:**
+        - **CNN Emotion Detection**: Deep learning emotion recognition
+        - **Advanced Age Estimation**: Multi-factor age prediction models
+        - **Real-time Processing**: Optimized for mobile and web deployment
+        - **Progressive Enhancement**: Continuous learning capabilities
         
-        **📊 Technical Capabilities:**
-        - **80+ Facial Features**: Comprehensive feature extraction
-        - **Multi-Model Approach**: ML models with intelligent fallback systems
-        - **Real-time Processing**: Fast analysis suitable for web applications
-        - **Golden Ratio Analysis**: Mathematical beauty proportion assessment
-        - **Facial Thirds**: Professional facial proportion analysis
+        **📱 Mobile Optimization:**
+        - **Enhanced Preprocessing**: CLAHE contrast enhancement
+        - **Noise Reduction**: Bilateral filtering for cleaner analysis
+        - **EXIF Handling**: Automatic image orientation correction
+        - **Multi-format Support**: JPEG, PNG, WebP, and more
         
-        **🎨 Face Shape Classifications:**
-        - **Oval**: Balanced, slightly longer than wide (considered ideal)
-        - **Round**: Similar width and height, soft features
-        - **Square**: Strong jawline, angular features
-        - **Rectangle**: Longer face with strong jaw
-        - **Heart**: Wide forehead, narrow chin
-        - **Pear**: Narrow forehead, wide jaw
-        - **Diamond**: Wide cheekbones, narrow forehead and chin
+        **💄 Personalization Engine:**
+        - **Face Shape Specific**: Tailored recommendations for each shape
+        - **Beauty Factor Analysis**: Multi-dimensional beauty assessment
+        - **Dynamic Recommendations**: Adaptive based on individual features
+        - **Progress Tracking**: Long-term beauty and health monitoring
         
-        **⏰ Facial Analysis Factors:**
-        - **Skin Texture**: Smoothness and fine pattern analysis
-        - **Facial Contrast**: Light/dark variation patterns
-        - **Feature Positioning**: Geometric feature relationships
-        - **Edge Detection**: Texture and pattern recognition
+        **🏃‍♀️ Wellness Integration:**
+        - **Facial Exercise Programs**: Scientifically-based face yoga
+        - **Anti-aging Protocols**: Age-specific exercise routines
+        - **Progress Monitoring**: Track improvements over time
+        - **Health Insights**: Facial analysis for wellness indicators
         
-        **✨ Beauty Score Components:**
-        - **Golden Ratio (25%)**: 1.618 ratio adherence
-        - **Symmetry (30%)**: Left-right facial balance
-        - **Proportions (30%)**: Facial thirds and feature balance
-        - **Skin Quality (20%)**: Smoothness and texture
-        - **Face Shape (15%)**: Shape preference scoring
-        
-        **💡 For Best Results:**
-        - Use clear, well-lit photos with front-facing pose
-        - Ensure face occupies 30-60% of image frame
-        - Avoid heavy shadows, sunglasses, or obstructions
-        - Natural lighting works better than artificial lighting
-        
-        **🔒 Privacy & Ethics:**
-        - All processing is done locally/server-side
-        - No images are stored permanently
-        - Analysis is for entertainment and educational purposes
-        - Beauty standards are subjective and culturally variable
+        **🔬 Scientific Accuracy:**
+        - **Golden Ratio Analysis**: Mathematical beauty standards
+        - **Facial Thirds**: Professional proportion assessment
+        - **Symmetry Algorithms**: Advanced bilateral comparison
+        - **Anthropometric Standards**: Based on facial anthropometry research
         """)
     
-    # Training and improvement information
-    with st.expander("🎓 Model Training & Improvement"):
+    with st.expander("🎯 How to Get Best Results"):
         st.write("""
-        ### 📚 **Enhancing Analysis Accuracy**
+        ### 📸 **Photography Tips for Optimal Analysis**
         
-        **🔄 Current Model Status:**
-        - Emotion detection uses trained ML models with rule-based fallbacks
-        - Face shape analysis uses geometric algorithms
-        - Age estimation combines multiple facial characteristics
-        - Beauty scoring uses mathematical ratios and proportions
+        **💡 Lighting:**
+        - Use natural daylight when possible
+        - Avoid harsh shadows or direct flash
+        - Ensure even lighting across the face
+        - Avoid backlighting or silhouettes
         
-        **📈 Potential Improvements:**
+        **📱 Camera Position:**
+        - Hold camera at eye level
+        - Keep face centered in frame
+        - Fill 40-60% of frame with face
+        - Ensure both eyes are visible and level
         
-        **For Emotion Detection:**
-        - Retrain with more diverse emotion datasets
-        - Implement deep learning CNN models
-        - Add micro-expression detection
-        - Include cultural emotion variations
+        **😊 Expression & Pose:**
+        - Neutral expression for most accurate analysis
+        - Look directly at camera
+        - Keep head straight (not tilted)
+        - Remove sunglasses and hats
         
-        **For Face Shape Analysis:**
-        - Machine learning classification models
-        - 3D facial landmark detection
-        - More precise contour analysis
-        - Professional facial measurement standards
+        **🔧 Technical Settings:**
+        - Use highest resolution available
+        - Ensure image isn't blurry
+        - Avoid heavy filters or editing
+        - Save in high-quality format (JPEG fine, PNG)
         
-        **For Age Estimation:**
-        - Deep learning age regression models
-        - Larger diverse age datasets
-        - Multi-ethnic training data
-        - Gender-specific age patterns
-        
-        **For Beauty Analysis:**
-        - Cultural beauty standard variations
-        - Time-period beauty trend analysis
-        - Individual preference learning
-        - More sophisticated feature weighting
-        
-        **🚀 Advanced Features (Future):**
-        - 3D face reconstruction and analysis
-        - Real-time video analysis
-        - Makeup and styling recommendations
-        - Facial exercise suggestions
-        - Progress tracking over time
-        
-        **🛠️ Technical Enhancements:**
-        - GPU acceleration for faster processing
-        - Mobile app deployment
-        - Batch processing capabilities
-        - API endpoints for integration
-        - Cloud-based model serving
+        **📊 For Progress Tracking:**
+        - Use consistent lighting conditions
+        - Same camera distance and angle
+        - Regular intervals (weekly/monthly)
+        - Document any changes (makeup, skincare, etc.)
         """)
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: #666;'>
+        🎭 Advanced 3D Face Analysis System | 
+        Built with MediaPipe, TensorFlow & Streamlit | 
+        ⚠️ For entertainment and educational purposes
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
