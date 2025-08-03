@@ -111,8 +111,8 @@ def detect_facial_features(image):
 
 def analyze_face_shape_opencv(face_coords):
     """Analyze face shape using OpenCV detection results"""
-    if face_coords is None:
-        return {'shape': 'Unknown', 'confidence': 0}
+    if face_coords is None or len(face_coords) < 4:
+        return {'shape': 'Unknown', 'confidence': 0, 'face_ratio': 1.5, 'jaw_ratio': 0.8, 'measurements': {}}
     
     x, y, w, h = face_coords
     
@@ -155,14 +155,14 @@ def analyze_face_shape_opencv(face_coords):
 
 def calculate_beauty_score_opencv(face_coords, shape_analysis, features):
     """Calculate beauty score using OpenCV-based analysis"""
-    if face_coords is None:
+    if face_coords is None or len(face_coords) < 4:
         return 50, []
     
     beauty_factors = []
     x, y, w, h = face_coords
     
     # 1. Facial Symmetry (based on feature detection)
-    eyes = features.get('eyes', [])
+    eyes = features.get('eyes', []) if features else []
     if len(eyes) >= 2:
         # Calculate eye symmetry
         eye1_center = eyes[0][0] + eyes[0][2]//2
@@ -207,6 +207,9 @@ def calculate_beauty_score_opencv(face_coords, shape_analysis, features):
 def predict_emotion_opencv(features):
     """Enhanced emotion prediction using OpenCV-based analysis"""
     try:
+        if not features:
+            return "Neutral", [0.1, 0.1, 0.1, 0.4, 0.1, 0.1, 0.1], ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprised', 'Neutral']
+        
         face_roi_gray = features.get('face_roi_gray')
         face_roi_color = features.get('face_roi')
         smiles = features.get('smiles', [])
@@ -338,7 +341,7 @@ def draw_analysis_overlay(image, face_coords, shape_analysis, beauty_score, emot
     vis_image = image.copy()
     h, w = vis_image.shape[:2]
     
-    if face_coords is not None:
+    if face_coords is not None and len(face_coords) >= 4:
         x, y, face_w, face_h = face_coords
         
         # Draw face rectangle with orange theme
@@ -373,6 +376,9 @@ def draw_analysis_overlay(image, face_coords, shape_analysis, beauty_score, emot
 
 def create_beauty_radar_chart(beauty_factors):
     """Create radar chart with orange theme"""
+    if not beauty_factors:
+        return None
+        
     categories = [factor[0] for factor in beauty_factors]
     values = [factor[1] for factor in beauty_factors]
     
@@ -568,17 +574,19 @@ def main():
         
         with col_shape1:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("🎯 Face Shape", shape_analysis['shape'])
+            st.metric("🎯 Face Shape", shape_analysis.get('shape', 'Unknown'))
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_shape2:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("✅ Confidence", f"{shape_analysis['confidence']:.1%}")
+            confidence = shape_analysis.get('confidence', 0)
+            st.metric("✅ Confidence", f"{confidence:.1%}")
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_shape3:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("📐 Face Ratio", f"{shape_analysis['face_ratio']:.2f}")
+            face_ratio = shape_analysis.get('face_ratio', 1.3)
+            st.metric("📐 Face Ratio", f"{face_ratio:.2f}")
             st.markdown('</div>', unsafe_allow_html=True)
         
         # Beauty Analysis
@@ -609,22 +617,24 @@ def main():
         
         with col_beauty2:
             radar_fig = create_beauty_radar_chart(beauty_factors)
-            st.plotly_chart(radar_fig, use_container_width=True)
+            if radar_fig:
+                st.plotly_chart(radar_fig, use_container_width=True)
         
         # Beauty Factors Breakdown
-        st.markdown("#### 📊 Beauty Factors Breakdown")
-        cols = st.columns(len(beauty_factors))
-        for i, (factor_name, score, weight) in enumerate(beauty_factors):
-            with cols[i]:
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                if score >= 85:
-                    st.success(f"**{factor_name}**\n{score:.1f}/100")
-                elif score >= 70:
-                    st.info(f"**{factor_name}**\n{score:.1f}/100")
-                else:
-                    st.warning(f"**{factor_name}**\n{score:.1f}/100")
-                st.caption(f"Weight: {weight:.0%}")
-                st.markdown('</div>', unsafe_allow_html=True)
+        if beauty_factors:
+            st.markdown("#### 📊 Beauty Factors Breakdown")
+            cols = st.columns(len(beauty_factors))
+            for i, (factor_name, score, weight) in enumerate(beauty_factors):
+                with cols[i]:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    if score >= 85:
+                        st.success(f"**{factor_name}**\n{score:.1f}/100")
+                    elif score >= 70:
+                        st.info(f"**{factor_name}**\n{score:.1f}/100")
+                    else:
+                        st.warning(f"**{factor_name}**\n{score:.1f}/100")
+                    st.caption(f"Weight: {weight:.0%}")
+                    st.markdown('</div>', unsafe_allow_html=True)
         
         # Emotion Analysis
         st.markdown("---")
@@ -633,7 +643,11 @@ def main():
         col_emotion1, col_emotion2 = st.columns([1, 1])
         
         with col_emotion1:
-            confidence = max(emotion_probs)
+            # Safe confidence calculation
+            try:
+                confidence = max(emotion_probs) if emotion_probs and isinstance(emotion_probs, (list, tuple)) else 0.0
+            except (ValueError, TypeError):
+                confidence = 0.0
             
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             if confidence > 0.6:
@@ -663,25 +677,26 @@ def main():
         
         with col_emotion2:
             # Emotion probability chart with orange theme
-            emotion_df = pd.DataFrame({
-                'Emotion': emotion_labels,
-                'Probability': emotion_probs
-            }).sort_values('Probability', ascending=False)
-            
-            fig_emotion = px.bar(
-                emotion_df, x='Probability', y='Emotion', 
-                orientation='h',
-                title='🎭 Emotion Analysis Results',
-                color='Probability',
-                color_continuous_scale=['#FFE4B5', '#FF8C00', '#FF4500']
-            )
-            fig_emotion.update_layout(
-                height=400,
-                title_font_color='#FF8C00',
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            st.plotly_chart(fig_emotion, use_container_width=True)
+            if emotion_probs and emotion_labels and len(emotion_probs) == len(emotion_labels):
+                emotion_df = pd.DataFrame({
+                    'Emotion': emotion_labels,
+                    'Probability': emotion_probs
+                }).sort_values('Probability', ascending=False)
+                
+                fig_emotion = px.bar(
+                    emotion_df, x='Probability', y='Emotion', 
+                    orientation='h',
+                    title='🎭 Emotion Analysis Results',
+                    color='Probability',
+                    color_continuous_scale=['#FFE4B5', '#FF8C00', '#FF4500']
+                )
+                fig_emotion.update_layout(
+                    height=400,
+                    title_font_color='#FF8C00',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(fig_emotion, use_container_width=True)
         
         # Enhanced Features Detection Info
         st.markdown("---")
@@ -691,26 +706,31 @@ def main():
         
         with col_detect1:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            eyes_count = len(features.get('eyes', []))
+            eyes_count = len(features.get('eyes', [])) if features else 0
             st.metric("👁️ Eyes Detected", eyes_count)
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_detect2:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            smiles_count = len(features.get('smiles', []))
+            smiles_count = len(features.get('smiles', [])) if features else 0
             st.metric("😊 Smiles Detected", smiles_count)
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_detect3:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            face_area = face_coords[2] * face_coords[3] if face_coords else 0
+            # Safe face area calculation
+            try:
+                face_area = face_coords[2] * face_coords[3] if (face_coords is not None and len(face_coords) >= 4) else 0
+            except (IndexError, TypeError):
+                face_area = 0
             st.metric("📐 Face Area", f"{face_area:,}px²")
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_detect4:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            measurements = shape_analysis.get('measurements', {})
-            face_width = measurements.get('face_width', 0)
+            # Safe face width calculation
+            measurements = shape_analysis.get('measurements', {}) if shape_analysis else {}
+            face_width = measurements.get('face_width', 0) if measurements else 0
             st.metric("📏 Face Width", f"{face_width}px")
             st.markdown('</div>', unsafe_allow_html=True)
         
@@ -718,7 +738,7 @@ def main():
         st.markdown("---")
         st.markdown("### 💄 Personalized Beauty Recommendations")
         
-        recommendations = get_recommendations(shape_analysis['shape'], beauty_factors)
+        recommendations = get_recommendations(shape_analysis.get('shape', 'Oval'), beauty_factors)
         
         st.markdown("#### ✨ Makeup & Styling Tips")
         cols = st.columns(2)
@@ -751,8 +771,9 @@ def main():
             'Oval': ["✨ **Versatility**: You can experiment with most makeup styles!"]
         }
         
-        if shape_analysis['shape'] in shape_tips:
-            enhancement_tips.extend(shape_tips[shape_analysis['shape']])
+        current_shape = shape_analysis.get('shape', 'Oval')
+        if current_shape in shape_tips:
+            enhancement_tips.extend(shape_tips[current_shape])
         
         # Display enhancement tips
         for tip in enhancement_tips:
@@ -789,7 +810,7 @@ def main():
                         st.image(image, caption="Original Photo", use_container_width=True)
                         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         st.metric("Beauty Score", f"{beauty_score:.1f}")
-                        st.metric("Face Shape", shape_analysis['shape'])
+                        st.metric("Face Shape", shape_analysis.get('shape', 'Unknown'))
                         st.metric("Emotion", emotion)
                         st.markdown('</div>', unsafe_allow_html=True)
                     
@@ -808,7 +829,7 @@ def main():
                         st.image(comp_image, caption="Comparison Photo", use_container_width=True)
                         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         st.metric("Beauty Score", f"{comp_beauty:.1f}", delta=f"{score_diff:.1f}")
-                        st.metric("Face Shape", comp_shape['shape'])
+                        st.metric("Face Shape", comp_shape.get('shape', 'Unknown'))
                         st.metric("Emotion", comp_emotion)
                         st.markdown('</div>', unsafe_allow_html=True)
                 else:
