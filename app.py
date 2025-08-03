@@ -221,108 +221,110 @@ def predict_emotion_opencv(features):
         # Enhanced emotion detection using multiple factors
         h, w = face_roi_gray.shape
         
-        # 1. Smile detection score
-        smile_score = len(smiles) * 0.3
+        # Initialize base scores
+        emotion_scores = {
+            'happy': 0.2,
+            'sad': 0.15,
+            'angry': 0.1,
+            'surprised': 0.1,
+            'fear': 0.1,
+            'disgust': 0.1,
+            'neutral': 0.25
+        }
+        
+        # 1. Enhanced Smile Detection
+        smile_intensity = 0
         if len(smiles) > 0:
-            # Calculate smile strength based on size
-            smile_areas = [s[2] * s[3] for s in smiles]
-            smile_score += np.mean(smile_areas) / (w * h) * 10
+            # Calculate relative smile size
+            smile_areas = [(s[2] * s[3]) / (w * h) for s in smiles]
+            smile_intensity = min(1.0, np.mean(smile_areas) * 50)  # Boost smile detection
+            emotion_scores['happy'] += smile_intensity * 0.6
+            emotion_scores['neutral'] -= smile_intensity * 0.3
+            emotion_scores['sad'] -= smile_intensity * 0.2
         
-        # 2. Eye analysis
-        eye_score = min(len(eyes), 2) * 0.2
-        eye_openness = 1.0
-        if len(eyes) >= 2:
-            # Analyze eye dimensions for surprise/tiredness
-            avg_eye_height = np.mean([e[3] for e in eyes])
-            avg_eye_width = np.mean([e[2] for e in eyes])
-            eye_ratio = avg_eye_height / avg_eye_width if avg_eye_width > 0 else 0.5
-            eye_openness = min(2.0, eye_ratio * 2)
+        # 2. Eye Analysis for Surprise/Fear
+        eye_openness = 0.5
+        if len(eyes) >= 1:
+            # Better eye analysis
+            eye_heights = [e[3] for e in eyes]
+            eye_widths = [e[2] for e in eyes]
+            avg_eye_ratio = np.mean([h/w for h, w in zip(eye_heights, eye_widths) if w > 0])
+            
+            if avg_eye_ratio > 0.6:  # Wide eyes
+                emotion_scores['surprised'] += 0.4
+                emotion_scores['fear'] += 0.3
+                emotion_scores['neutral'] -= 0.2
+            elif avg_eye_ratio < 0.3:  # Narrow eyes
+                emotion_scores['angry'] += 0.2
+                emotion_scores['sad'] += 0.2
         
-        # 3. Facial region analysis
-        # Divide face into regions
-        upper_face = face_roi_gray[:h//3, :]  # Forehead region
-        middle_face = face_roi_gray[h//3:2*h//3, :]  # Eye region
-        lower_face = face_roi_gray[2*h//3:, :]  # Mouth region
+        # 3. Facial Region Contrast Analysis
+        # Divide face into regions for better emotion detection
+        upper_region = face_roi_gray[:h//3, :]  # Forehead
+        middle_region = face_roi_gray[h//3:2*h//3, :]  # Eyes/nose
+        lower_region = face_roi_gray[2*h//3:, :]  # Mouth/chin
         
-        # Calculate regional statistics
-        upper_mean = np.mean(upper_face)
-        middle_mean = np.mean(middle_face)
-        lower_mean = np.mean(lower_face)
+        # Calculate regional brightness
+        upper_brightness = np.mean(upper_region) / 255.0
+        middle_brightness = np.mean(middle_region) / 255.0
+        lower_brightness = np.mean(lower_region) / 255.0
+        overall_brightness = np.mean(face_roi_gray) / 255.0
         
-        # Overall face statistics
-        face_mean = np.mean(face_roi_gray)
-        face_std = np.std(face_roi_gray)
+        # Brightness-based emotion indicators
+        if overall_brightness < 0.4:  # Dark face (shadows/sad)
+            emotion_scores['sad'] += 0.3
+            emotion_scores['angry'] += 0.2
+            emotion_scores['happy'] -= 0.2
+        elif overall_brightness > 0.7:  # Bright face (happy/surprised)
+            emotion_scores['happy'] += 0.2
+            emotion_scores['surprised'] += 0.1
         
-        # 4. Edge detection for expression lines
-        edges = cv2.Canny(face_roi_gray, 50, 150)
+        # Regional contrast analysis
+        if upper_brightness > lower_brightness + 0.1:  # Raised eyebrows
+            emotion_scores['surprised'] += 0.3
+            emotion_scores['fear'] += 0.2
+        elif lower_brightness > upper_brightness + 0.1:  # Lowered brow
+            emotion_scores['angry'] += 0.3
+            emotion_scores['sad'] += 0.2
+        
+        # 4. Edge Detection for Expression Lines
+        edges = cv2.Canny(face_roi_gray, 30, 100)
         edge_density = np.sum(edges > 0) / (w * h)
         
-        # 5. Histogram analysis
-        hist = cv2.calcHist([face_roi_gray], [0], None, [256], [0, 256])
-        hist_mean = np.argmax(hist)
+        if edge_density > 0.15:  # High edge density (wrinkles/tension)
+            emotion_scores['angry'] += 0.25
+            emotion_scores['disgust'] += 0.2
+            emotion_scores['surprised'] += 0.15
         
-        # Calculate emotion probabilities based on features
+        # 5. Mouth Region Analysis
+        mouth_region = lower_region[h//6:, :]  # Bottom third of lower region
+        if mouth_region.size > 0:
+            mouth_std = np.std(mouth_region)
+            if mouth_std > 25:  # High variation in mouth area
+                emotion_scores['happy'] += 0.2
+                emotion_scores['surprised'] += 0.1
         
-        # Happy: Strong smile detection + bright face + eye openness
-        happy_prob = (
-            smile_score * 0.4 +
-            (face_mean - 100) / 155 * 0.3 +
-            eye_openness * 0.2 +
-            (lower_mean / face_mean - 0.95) * 0.1
-        )
-        
-        # Sad: Low brightness + droopy features + no smile
-        sad_prob = (
-            (1 - smile_score / 2) * 0.4 +
-            (150 - face_mean) / 150 * 0.3 +
-            (1 - eye_openness) * 0.2 +
-            (upper_mean / lower_mean - 1) * 0.1
-        )
-        
-        # Angry: High contrast + no smile + tense features
-        angry_prob = (
-            (face_std / 50) * 0.4 +
-            (1 - smile_score / 2) * 0.3 +
-            edge_density * 0.2 +
-            (middle_mean / face_mean - 0.95) * 0.1
-        )
-        
-        # Surprised: Wide eyes + high upper face brightness
-        surprised_prob = (
-            eye_openness * 0.5 +
-            (upper_mean / face_mean - 0.95) * 0.3 +
-            edge_density * 0.2
-        )
-        
-        # Fear: Similar to surprised but with lower overall brightness
-        fear_prob = (
-            eye_openness * 0.3 +
-            (130 - face_mean) / 130 * 0.4 +
-            edge_density * 0.3
-        )
-        
-        # Disgust: Nose wrinkle area + mouth tension
-        disgust_prob = (
-            edge_density * 0.4 +
-            (middle_mean / lower_mean - 0.95) * 0.3 +
-            (1 - smile_score / 2) * 0.3
-        )
-        
-        # Neutral: Balanced features, no strong indicators
-        neutral_prob = 1 - max(happy_prob, sad_prob, angry_prob, surprised_prob, fear_prob, disgust_prob)
-        
-        # Normalize probabilities
-        probabilities = [angry_prob, disgust_prob, fear_prob, happy_prob, sad_prob, surprised_prob, max(0, neutral_prob)]
-        
-        # Ensure all probabilities are between 0 and 1
-        probabilities = [max(0, min(1, p)) for p in probabilities]
-        
-        # Normalize to sum to 1
-        total = sum(probabilities)
-        if total > 0:
-            probabilities = [p/total for p in probabilities]
+        # Normalize scores to probabilities
+        total_score = sum(emotion_scores.values())
+        if total_score > 0:
+            probabilities = [
+                emotion_scores['angry'] / total_score,
+                emotion_scores['disgust'] / total_score,
+                emotion_scores['fear'] / total_score,
+                emotion_scores['happy'] / total_score,
+                emotion_scores['sad'] / total_score,
+                emotion_scores['surprised'] / total_score,
+                emotion_scores['neutral'] / total_score
+            ]
         else:
             probabilities = [1/7] * 7
+        
+        # Ensure all probabilities are valid
+        probabilities = [max(0.01, min(0.98, p)) for p in probabilities]
+        
+        # Re-normalize
+        total = sum(probabilities)
+        probabilities = [p/total for p in probabilities]
         
         emotions = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprised', 'Neutral']
         prediction = emotions[np.argmax(probabilities)]
@@ -331,7 +333,7 @@ def predict_emotion_opencv(features):
         
     except Exception as e:
         st.error(f"Emotion prediction error: {str(e)}")
-        return "Neutral", [0, 0, 0, 0.7, 0, 0, 0.3], ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprised', 'Neutral']
+        return "Neutral", [0.14, 0.14, 0.14, 0.15, 0.14, 0.14, 0.15], ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprised', 'Neutral']
 
 def draw_analysis_overlay(image, face_coords, shape_analysis, beauty_score, emotion_data):
     """Draw analysis overlay on image"""
@@ -898,7 +900,7 @@ def main():
         
         <h4 style="color: #FF6347;">🔧 Technical Quality:</h4>
         <ul>
-            <li>📊 <strong>High Resolution:</strong> Use your camera's highest setting</li>
+            <li>📊 <strong>High Resolution:</strong> Use your camera highest setting</li>
             <li>🔍 <strong>Sharp Focus:</strong> Ensure the image is crisp and clear</li>
             <li>🎨 <strong>No Filters:</strong> Avoid Instagram filters or heavy editing</li>
             <li>💾 <strong>Original Format:</strong> Upload uncompressed images when possible</li>
