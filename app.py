@@ -13,10 +13,10 @@ import plotly.express as px
 from scipy.spatial import distance
 import os
 
-# Set page config with orange theme
+# Set page config with attractive theme
 st.set_page_config(
-    page_title="OpenCV Face Analysis",
-    page_icon="🎭",
+    page_title="AI Beauty Studio",
+    page_icon="✨",
     layout="wide"
 )
 
@@ -466,61 +466,195 @@ def get_recommendations(face_shape, beauty_factors):
     return shape_makeup.get(face_shape, shape_makeup['Oval'])
 
 def main():
-    # Orange theme CSS
+    # Enhanced attractive CSS with gradients and animations
     st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
     .main-header {
-        background: linear-gradient(135deg, #FF8C00 0%, #FF6347 50%, #FF4500 100%);
-        padding: 2rem;
-        border-radius: 15px;
+        background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 25%, #FF6B9D 50%, #C44569 75%, #F8B500 100%);
+        padding: 3rem 2rem;
+        border-radius: 20px;
         color: white;
         text-align: center;
         margin-bottom: 2rem;
-        box-shadow: 0 8px 32px rgba(255, 140, 0, 0.3);
+        box-shadow: 0 20px 60px rgba(255, 107, 107, 0.4);
+        position: relative;
+        overflow: hidden;
+        font-family: 'Inter', sans-serif;
     }
+    
+    .main-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+        animation: shine 3s infinite;
+    }
+    
+    @keyframes shine {
+        0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+        100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+    }
+    
     .analysis-card {
-        background: linear-gradient(135deg, #FFF8DC 0%, #FFEFD5 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        border-left: 5px solid #FF8C00;
-        margin: 1rem 0;
-        box-shadow: 0 4px 15px rgba(255, 140, 0, 0.2);
+        background: linear-gradient(135deg, #FFFFFF 0%, #FFF5F5 50%, #FFE5E5 100%);
+        padding: 2rem;
+        border-radius: 20px;
+        border: 2px solid #FFB3BA;
+        margin: 1.5rem 0;
+        box-shadow: 0 15px 35px rgba(255, 107, 107, 0.15);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
     }
+    
+    .analysis-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 25px 50px rgba(255, 107, 107, 0.25);
+    }
+    
     .metric-card {
-        background: linear-gradient(135deg, #FFFFFF 0%, #FFF8DC 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(255, 140, 0, 0.15);
+        background: linear-gradient(135deg, #FFFFFF 0%, #FFF8F0 50%, #FFEDE0 100%);
+        padding: 2rem;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(255, 139, 0, 0.2);
         text-align: center;
-        border: 2px solid #FFE4B5;
+        border: 3px solid #FFD700;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
     }
+    
+    .metric-card:hover {
+        transform: scale(1.05);
+        box-shadow: 0 20px 40px rgba(255, 139, 0, 0.3);
+    }
+    
+    .beauty-score-card {
+        background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%);
+        padding: 2.5rem;
+        border-radius: 20px;
+        color: white;
+        text-align: center;
+        box-shadow: 0 20px 50px rgba(255, 165, 0, 0.4);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .beauty-score-card::before {
+        content: '✨';
+        position: absolute;
+        font-size: 3rem;
+        opacity: 0.2;
+        top: 10px;
+        right: 15px;
+        animation: float 2s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+    
+    .recommendation-card {
+        background: linear-gradient(135deg, #E8F5E8 0%, #F0FFF0 50%, #F5FFFA 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
+        border-left: 6px solid #32CD32;
+        margin: 1rem 0;
+        box-shadow: 0 8px 25px rgba(50, 205, 50, 0.15);
+        transition: all 0.3s ease;
+    }
+    
+    .recommendation-card:hover {
+        transform: translateX(10px);
+        border-left-width: 8px;
+    }
+    
+    .tips-card {
+        background: linear-gradient(135deg, #E6F3FF 0%, #F0F8FF 50%, #F8FCFF 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
+        border-left: 6px solid #4169E1;
+        margin: 1rem 0;
+        box-shadow: 0 8px 25px rgba(65, 105, 225, 0.15);
+        transition: all 0.3s ease;
+    }
+    
+    .tips-card:hover {
+        transform: translateX(10px);
+        border-left-width: 8px;
+    }
+    
     .stMetric > label {
-        color: #FF8C00 !important;
-        font-weight: bold !important;
+        color: #FF6B6B !important;
+        font-weight: 600 !important;
+        font-family: 'Inter', sans-serif !important;
     }
+    
     .stMetric > div {
-        color: #FF6347 !important;
+        color: #C44569 !important;
+        font-weight: 700 !important;
     }
-    .sidebar .sidebar-content {
-        background: linear-gradient(180deg, #FFF8DC 0%, #FFEFD5 100%);
+    
+    .emotion-card {
+        background: linear-gradient(135deg, #E8E8FF 0%, #F0F0FF 50%, #F8F8FF 100%);
+        padding: 2rem;
+        border-radius: 20px;
+        border: 3px solid #9370DB;
+        box-shadow: 0 15px 35px rgba(147, 112, 219, 0.2);
+    }
+    
+    .section-divider {
+        height: 4px;
+        background: linear-gradient(90deg, #FF6B6B, #FF8E53, #FF6B9D, #C44569, #F8B500);
+        border-radius: 2px;
+        margin: 2rem 0;
+        animation: gradient-flow 3s ease infinite;
+    }
+    
+    @keyframes gradient-flow {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+    }
+    
+    .hero-text {
+        font-size: 1.2em;
+        background: linear-gradient(45deg, #FF6B6B, #FF8E53, #FF6B9D);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 600;
+        margin: 1rem 0;
     }
     </style>
     """, unsafe_allow_html=True)
     
     st.markdown("""
     <div class="main-header">
-        <h1>🎭 AI Face Analysis Studio</h1>
-        <p>Discover your unique beauty with advanced OpenCV technology!</p>
-        <p style="font-size: 0.9em; opacity: 0.9;">✨ Fast • Accurate • Beautiful Orange Theme ✨</p>
+        <h1 style="font-size: 3.5em; margin: 0;">✨ AI Beauty Studio ✨</h1>
+        <p style="font-size: 1.3em; margin: 15px 0; opacity: 0.95;">Discover Your Unique Beauty with Advanced AI Technology</p>
+        <div class="hero-text">
+            🎨 Professional Analysis • 💫 Personalized Recommendations • 📸 Beauty Enhancement Tips
+        </div>
+        <p style="font-size: 0.9em; opacity: 0.8; margin-top: 20px;">
+            ⚡ Lightning Fast • 🔬 Scientific Accuracy • 🎯 Personalized Results
+        </p>
     </div>
     """, unsafe_allow_html=True)
     
-    # File uploader
+    # File uploader with enhanced styling
     st.markdown("### 📸 Upload Your Photo")
+    st.markdown('<p class="hero-text">Transform your selfie into a professional beauty analysis!</p>', unsafe_allow_html=True)
+    
     uploaded_file = st.file_uploader(
         "Choose an image for analysis...", 
         type=['jpg', 'jpeg', 'png', 'bmp'],
-        help="🧡 For best results, use clear photos with good lighting"
+        help="✨ For best results, use clear photos with good lighting"
     )
     
     if uploaded_file is not None:
@@ -565,51 +699,260 @@ def main():
             
             with col2:
                 st.markdown("#### 🔍 AI Analysis Results")
-                st.image(vis_image, caption="OpenCV Analysis with Orange Theme", use_container_width=True)
+                st.image(vis_image, caption="AI Beauty Analysis Results", use_container_width=True)
         
-        # Analysis Results
-        st.markdown("---")
-        st.markdown("### 📊 Detailed Analysis")
+        # Personalized Beauty Recommendations (MOVED TO TOP)
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+        st.markdown("## 💄 Your Personalized Beauty Guide")
+        
+        recommendations = get_recommendations(shape_analysis.get('shape', 'Oval'), beauty_factors)
+        
+        st.markdown("### ✨ Makeup & Styling Recommendations")
+        cols = st.columns(2)
+        for i, rec in enumerate(recommendations):
+            with cols[i % 2]:
+                st.markdown(f"""
+                <div class="recommendation-card">
+                    <h5 style="color: #228B22; margin: 0;">{rec}</h5>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Additional enhancement tips
+        st.markdown("### 🌟 Personalized Enhancement Tips")
+        
+        enhancement_tips = []
+        if beauty_score < 70:
+            enhancement_tips.extend([
+                "✨ **Skincare Focus**: Consistent skincare routine can enhance natural glow",
+                "💫 **Strategic Highlighting**: Enhance facial structure with light and shadow",
+                "🌟 **Confidence Boost**: Your unique features are your greatest asset!"
+            ])
+        
+        # Add tips based on face shape
+        shape_tips = {
+            'Round': ["🔥 **Contouring Magic**: Focus on adding definition to jawline and cheekbones"],
+            'Square': ["🌸 **Softening Techniques**: Use curved lines and soft colors to balance angular features"],
+            'Heart': ["💋 **Perfect Balance**: Draw attention to lips to balance wider forehead"],
+            'Rectangle': ["🌟 **Width Enhancement**: Add horizontal elements to create width illusion"],
+            'Diamond': ["💎 **Harmony Creation**: Soften cheekbones while enhancing forehead and chin"],
+            'Oval': ["✨ **Versatile Canvas**: You can experiment with most makeup styles!"]
+        }
+        
+        current_shape = shape_analysis.get('shape', 'Oval')
+        if current_shape in shape_tips:
+            enhancement_tips.extend(shape_tips[current_shape])
+        
+        # Display enhancement tips in attractive cards
+        for tip in enhancement_tips:
+            st.markdown(f"""
+            <div class="recommendation-card">
+                <p style="margin: 0; color: #2F4F2F; font-weight: 500;">{tip}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Photography Tips Section (MOVED UP)
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+        st.markdown("## 📸 Photography Tips for Stunning Results")
+        
+        photo_tips = [
+            {
+                "icon": "💡",
+                "title": "Perfect Lighting",
+                "tips": [
+                    "🌅 **Golden Hour Magic**: 1 hour after sunrise or before sunset",
+                    "🪟 **Window Light**: Soft, diffused natural light works best",
+                    "🚫 **Avoid Harsh Flash**: Creates unflattering shadows",
+                    "💡 **Even Illumination**: Light should hit your face evenly"
+                ]
+            },
+            {
+                "icon": "📱",
+                "title": "Camera Technique",
+                "tips": [
+                    "👁️ **Eye Level Shot**: Camera at your eye level for best angles",
+                    "🎯 **Center Your Face**: Keep yourself in the frame center",
+                    "📏 **Optimal Distance**: Face should fill 40-60% of frame",
+                    "📐 **Straight Angle**: Keep your head level and upright"
+                ]
+            },
+            {
+                "icon": "😊",
+                "title": "Expression & Style",
+                "tips": [
+                    "😐 **Natural Expression**: Relaxed face for accurate analysis",
+                    "👀 **Direct Gaze**: Look straight into the camera",
+                    "👓 **Remove Accessories**: Take off glasses, hats, face coverings",
+                    "💄 **Minimal Makeup**: Natural look gives best detection results"
+                ]
+            },
+            {
+                "icon": "🔧",
+                "title": "Technical Quality",
+                "tips": [
+                    "📊 **High Resolution**: Use your camera's highest quality setting",
+                    "🔍 **Sharp Focus**: Ensure image is crisp and clear",
+                    "🎨 **No Filters**: Avoid Instagram filters or heavy editing",
+                    "💾 **Original Format**: Upload uncompressed images when possible"
+                ]
+            }
+        ]
+        
+        cols = st.columns(2)
+        for i, tip_category in enumerate(photo_tips):
+            with cols[i % 2]:
+                st.markdown(f"""
+                <div class="tips-card">
+                    <h4 style="color: #4169E1; margin-top: 0;">
+                        {tip_category['icon']} {tip_category['title']}
+                    </h4>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        {''.join([f'<li style="margin: 8px 0; color: #333;">{tip}</li>' for tip in tip_category['tips']])}
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Beauty Analysis Section
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+        st.markdown("## ✨ Beauty Analysis Results")
+        
+        col_beauty1, col_beauty2 = st.columns([1, 1])
+        
+        with col_beauty1:
+            st.markdown('<div class="beauty-score-card">', unsafe_allow_html=True)
+            if beauty_score >= 85:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🌟 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Exceptional Beauty</h3>", unsafe_allow_html=True)
+                desc = "You possess stunning, exceptional beauty!"
+            elif beauty_score >= 75:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>✨ {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Very Attractive</h3>", unsafe_allow_html=True)
+                desc = "You have highly attractive, striking features!"
+            elif beauty_score >= 65:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🧡 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Above Average</h3>", unsafe_allow_html=True)
+                desc = "Your features are notably attractive and well-balanced!"
+            elif beauty_score >= 55:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🌸 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Naturally Pretty</h3>", unsafe_allow_html=True)
+                desc = "You have natural, warm beauty that's very appealing!"
+            else:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🎨 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Unique Beauty</h3>", unsafe_allow_html=True)
+                desc = "Your distinctive features create memorable, unique beauty!"
+            
+            st.markdown(f"<p style='font-style: italic; opacity: 0.9; margin: 15px 0;'>{desc}</p>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col_beauty2:
+            radar_fig = create_beauty_radar_chart(beauty_factors)
+            if radar_fig:
+                st.plotly_chart(radar_fig, use_container_width=True)
+        
+        # Beauty Factors Breakdown
+        if beauty_factors:
+            st.markdown("### 📊 Beauty Factors Breakdown")
+            cols = st.columns(len(beauty_factors))
+            for i, (factor_name, score, weight) in enumerate(beauty_factors):
+                with cols[i]:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    if score >= 85:
+                        st.markdown(f"<h4 style='color: #228B22; margin: 0;'>{factor_name}</h4>", unsafe_allow_html=True)
+                        st.markdown(f"<h2 style='color: #32CD32; margin: 5px 0;'>{score:.1f}</h2>", unsafe_allow_html=True)
+                        st.markdown("<p style='color: #228B22; margin: 5px 0;'>Excellent ⭐</p>", unsafe_allow_html=True)
+                    elif score >= 70:
+                        st.markdown(f"<h4 style='color: #FF8C00; margin: 0;'>{factor_name}</h4>", unsafe_allow_html=True)
+                        st.markdown(f"<h2 style='color: #FFA500; margin: 5px 0;'>{score:.1f}</h2>", unsafe_allow_html=True)
+                        st.markdown("<p style='color: #FF8C00; margin: 5px 0;'>Good ✨</p>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<h4 style='color: #FF6B6B; margin: 0;'>{factor_name}</h4>", unsafe_allow_html=True)
+                        st.markdown(f"<h2 style='color: #FF4757; margin: 5px 0;'>{score:.1f}</h2>", unsafe_allow_html=True)
+                        st.markdown("<p style='color: #FF6B6B; margin: 5px 0;'>Potential 💫</p>", unsafe_allow_html=True)
+                    st.caption(f"Weight: {weight:.0%}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Emotion Analysis
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+        st.markdown("## 😊 Emotion Analysis")
+        
+        col_emotion1, col_emotion2 = st.columns([1, 1])
+        
+        with col_emotion1:
+            # Safe confidence calculation
+            try:
+                confidence = max(emotion_probs) if emotion_probs and isinstance(emotion_probs, (list, tuple)) else 0.0
+            except (ValueError, TypeError):
+                confidence = 0.0
+            
+            st.markdown('<div class="emotion-card">', unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color: #9370DB; margin: 0; text-align: center;'>🎭 {emotion}</h2>", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='color: #8A2BE2; margin: 10px 0; text-align: center;'>Confidence: {confidence:.1%}</h3>", unsafe_allow_html=True)
+            
+            # Emotion meanings with attractive styling
+            emotion_meanings = {
+                'Happy': "😊 Radiating joy and positive energy! ✨",
+                'Sad': "😔 Thoughtful or contemplative mood detected.",
+                'Angry': "😠 Intensity and strong determination present.",
+                'Surprised': "😲 Alert, curious, and engaged expression! 💫",
+                'Fear': "😨 Cautious or concerned expression detected.",
+                'Disgust': "😤 Disapproval or distaste in expression.",
+                'Neutral': "😐 Calm, composed, and balanced expression. 🌟"
+            }
+            
+            if emotion in emotion_meanings:
+                st.markdown(f"<p style='text-align: center; font-style: italic; color: #6A5ACD; margin: 15px 0;'>{emotion_meanings[emotion]}</p>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col_emotion2:
+            # Emotion probability chart with attractive theme
+            if emotion_probs and emotion_labels and len(emotion_probs) == len(emotion_labels):
+                emotion_df = pd.DataFrame({
+                    'Emotion': emotion_labels,
+                    'Probability': emotion_probs
+                }).sort_values('Probability', ascending=False)
+                
+                fig_emotion = px.bar(
+                    emotion_df, x='Probability', y='Emotion', 
+                    orientation='h',
+                    title='🎭 Emotion Probability Distribution',
+                    color='Probability',
+                    color_continuous_scale=['#E6E6FA', '#9370DB', '#8A2BE2', '#4B0082']
+                )
+                fig_emotion.update_layout(
+                    height=400,
+                    title_font_color='#9370DB',
+                    title_font_size=16,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(family="Inter, sans-serif")
+                )
+                st.plotly_chart(fig_emotion, use_container_width=True)
+        
+        # Detailed Analysis (MOVED TO BOTTOM)
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+        st.markdown("## 📊 Detailed Analysis Results")
         
         # Face Shape Analysis
         col_shape1, col_shape2, col_shape3 = st.columns(3)
         
         with col_shape1:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("🎯 Face Shape", shape_analysis.get('shape', 'Unknown'))
+            st.markdown(f"<h3 style='color: #FF6B6B; margin: 0;'>🎯 Face Shape</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color: #C44569; margin: 10px 0;'>{shape_analysis.get('shape', 'Unknown')}</h2>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_shape2:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             confidence = shape_analysis.get('confidence', 0)
-            st.metric("✅ Confidence", f"{confidence:.1%}")
+            st.markdown(f"<h3 style='color: #FF6B6B; margin: 0;'>✅ Confidence</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color: #C44569; margin: 10px 0;'>{confidence:.1%}</h2>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_shape3:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             face_ratio = shape_analysis.get('face_ratio', 1.3)
-            st.metric("📐 Face Ratio", f"{face_ratio:.2f}")
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Beauty Analysis
-        st.markdown("### ✨ Beauty Analysis")
-        
-        col_beauty1, col_beauty2 = st.columns([1, 1])
-        
-        with col_beauty1:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            if beauty_score >= 85:
-                st.success(f"🌟 Exceptional Beauty: {beauty_score:.1f}/100")
-                desc = "You possess stunning, exceptional beauty!"
-            elif beauty_score >= 75:
-                st.success(f"✨ Very Attractive: {beauty_score:.1f}/100")
-                desc = "You have highly attractive, striking features!"
-            elif beauty_score >= 65:
-                st.info(f"🧡 Above Average: {beauty_score:.1f}/100")
-                desc = "Your features are notably attractive and well-balanced!"
-            elif beauty_score >= 55:
-                st.info(f"🌸 Naturally Pretty: {beauty_score:.1f}/100")
-                desc = "You have natural, warm beauty that's very appealing!"
+            st.markdown(f"<h3 style='color: #FF6B6B; margin: 0;'>📐 Face Ratio</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color: #C44569; margin: 10px 0;'>{face_ratio:.2f}</h2>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True), warm beauty that's very appealing!"
             else:
                 st.warning(f"🎨 Unique Beauty: {beauty_score:.1f}/100")
                 desc = "Your distinctive features create memorable, unique beauty!"
@@ -786,6 +1129,7 @@ def main():
             """, unsafe_allow_html=True)
         
         # Comparison Feature
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
         with st.expander("🔄 Compare with Another Photo"):
             st.markdown("### 📸 Upload another image for comparison!")
             
@@ -811,13 +1155,14 @@ def main():
                     with col_comp1:
                         st.image(image, caption="Original Photo", use_container_width=True)
                         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.metric("Beauty Score", f"{beauty_score:.1f}")
-                        st.metric("Face Shape", shape_analysis.get('shape', 'Unknown'))
-                        st.metric("Emotion", emotion)
+                        st.markdown(f"<h4 style='color: #FF6B6B;'>Beauty Score</h4>", unsafe_allow_html=True)
+                        st.markdown(f"<h2 style='color: #C44569;'>{beauty_score:.1f}</h2>", unsafe_allow_html=True)
+                        st.markdown(f"<p>Shape: {shape_analysis.get('shape', 'Unknown')}</p>", unsafe_allow_html=True)
+                        st.markdown(f"<p>Emotion: {emotion}</p>", unsafe_allow_html=True)
                         st.markdown('</div>', unsafe_allow_html=True)
                     
                     with col_comp2:
-                        st.markdown("<h4 style='text-align: center; color: #FF8C00; margin-top: 100px;'>⚡ VS ⚡</h4>", unsafe_allow_html=True)
+                        st.markdown("<h2 style='text-align: center; color: #FF6B6B; margin-top: 100px;'>⚡ VS ⚡</h2>", unsafe_allow_html=True)
                         
                         score_diff = comp_beauty - beauty_score
                         if abs(score_diff) < 2:
@@ -830,9 +1175,10 @@ def main():
                     with col_comp3:
                         st.image(comp_image, caption="Comparison Photo", use_container_width=True)
                         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.metric("Beauty Score", f"{comp_beauty:.1f}", delta=f"{score_diff:.1f}")
-                        st.metric("Face Shape", comp_shape.get('shape', 'Unknown'))
-                        st.metric("Emotion", comp_emotion)
+                        st.markdown(f"<h4 style='color: #FF6B6B;'>Beauty Score</h4>", unsafe_allow_html=True)
+                        st.markdown(f"<h2 style='color: #C44569;'>{comp_beauty:.1f}</h2>", unsafe_allow_html=True)
+                        st.markdown(f"<p>Shape: {comp_shape.get('shape', 'Unknown')}</p>", unsafe_allow_html=True)
+                        st.markdown(f"<p>Emotion: {comp_emotion}</p>", unsafe_allow_html=True)
                         st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.error("❌ Could not analyze comparison image. Please try another photo.")
@@ -841,9 +1187,9 @@ def main():
     with st.expander("ℹ️ About Our AI Technology"):
         st.markdown("""
         <div class="analysis-card">
-        <h3 style="color: #FF8C00;">🚀 Advanced OpenCV Technology</h3>
+        <h3 style="color: #FF6B6B;">🚀 Advanced AI Technology</h3>
         
-        <h4 style="color: #FF6347;">🔍 Computer Vision Features:</h4>
+        <h4 style="color: #C44569;">🔍 Computer Vision Features:</h4>
         <ul>
             <li><strong>Multi-scale Detection:</strong> Advanced face detection with multiple parameters</li>
             <li><strong>Enhanced Preprocessing:</strong> CLAHE contrast enhancement and noise reduction</li>
@@ -851,7 +1197,7 @@ def main():
             <li><strong>Improved Emotion AI:</strong> Multi-factor emotion analysis system</li>
         </ul>
         
-        <h4 style="color: #FF6347;">📊 Analysis Components:</h4>
+        <h4 style="color: #C44569;">📊 Analysis Components:</h4>
         <ul>
             <li><strong>Face Shape:</strong> Geometric ratio-based classification</li>
             <li><strong>Beauty Scoring:</strong> Multi-dimensional assessment with weighted factors</li>
@@ -859,7 +1205,7 @@ def main():
             <li><strong>Personalization:</strong> Tailored recommendations based on your unique features</li>
         </ul>
         
-        <h4 style="color: #FF6347;">⚡ Performance Benefits:</h4>
+        <h4 style="color: #C44569;">⚡ Performance Benefits:</h4>
         <ul>
             <li><strong>Lightning Fast:</strong> Optimized OpenCV algorithms</li>
             <li><strong>No Dependencies:</strong> No heavy ML frameworks required</li>
@@ -869,57 +1215,27 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    with st.expander("🎯 Photography Tips for Best Results"):
-        st.markdown("""
-        <div class="analysis-card">
-        <h3 style="color: #FF8C00;">📸 Professional Photo Guidelines</h3>
-        
-        <h4 style="color: #FF6347;">💡 Lighting Setup:</h4>
-        <ul>
-            <li>🌞 <strong>Natural Light:</strong> Soft daylight from a window works best</li>
-            <li>📍 <strong>Even Illumination:</strong> Avoid harsh shadows on one side</li>
-            <li>🚫 <strong>No Direct Flash:</strong> Creates unflattering harsh shadows</li>
-            <li>⏰ <strong>Golden Hour:</strong> 1 hour after sunrise or before sunset is ideal</li>
-        </ul>
-        
-        <h4 style="color: #FF6347;">📱 Camera Position:</h4>
-        <ul>
-            <li>👁️ <strong>Eye Level:</strong> Camera should be at your eye level</li>
-            <li>🎯 <strong>Center Frame:</strong> Keep your face in the center</li>
-            <li>📏 <strong>Proper Distance:</strong> Face should fill 40-60% of frame</li>
-            <li>📐 <strong>Straight Angle:</strong> Keep your head upright and level</li>
-        </ul>
-        
-        <h4 style="color: #FF6347;">😊 Expression Tips:</h4>
-        <ul>
-            <li>😐 <strong>Neutral Expression:</strong> Most accurate for analysis</li>
-            <li>👀 <strong>Direct Gaze:</strong> Look straight at the camera</li>
-            <li>🚫 <strong>Remove Accessories:</strong> Glasses, hats, or face coverings</li>
-            <li>💄 <strong>Natural Look:</strong> Minimal makeup for best detection</li>
-        </ul>
-        
-        <h4 style="color: #FF6347;">🔧 Technical Quality:</h4>
-        <ul>
-            <li>📊 <strong>High Resolution:</strong> Use your camera highest setting</li>
-            <li>🔍 <strong>Sharp Focus:</strong> Ensure the image is crisp and clear</li>
-            <li>🎨 <strong>No Filters:</strong> Avoid Instagram filters or heavy editing</li>
-            <li>💾 <strong>Original Format:</strong> Upload uncompressed images when possible</li>
-        </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Footer with orange theme
+    # Footer with attractive theme
     st.markdown("---")
     st.markdown("""
-    <div style='text-align: center; padding: 25px; background: linear-gradient(135deg, #FF8C00 0%, #FF6347 50%, #FF4500 100%); border-radius: 15px; color: white; margin-top: 20px;'>
-        <h3>🎭 AI Face Analysis Studio</h3>
-        <p style="font-size: 1.1em; margin: 10px 0;">Powered by OpenCV • NumPy • Plotly • Streamlit</p>
-        <p style='font-size: 0.9em; opacity: 0.9; margin: 5px 0;'>
-            ⚡ Lightning Fast • 🎨 Beautiful Orange Theme • 🔧 No Heavy Dependencies
-        </p>
-        <p style='font-size: 0.8em; opacity: 0.8; margin-top: 15px;'>
-            ⚠️ For entertainment and educational purposes • Results may vary • Beauty is subjective and unique to everyone
-        </p>
+    <div style='text-align: center; padding: 3rem 2rem; background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 25%, #FF6B9D 50%, #C44569 75%, #F8B500 100%); border-radius: 20px; color: white; margin-top: 30px; position: relative; overflow: hidden;'>
+        <div style='position: relative; z-index: 2;'>
+            <h2 style="margin: 0;">✨ AI Beauty Studio ✨</h2>
+            <p style="font-size: 1.2em; margin: 15px 0; opacity: 0.95;">Powered by Advanced Computer Vision Technology</p>
+            <div style="display: flex; justify-content: center; gap: 20px; margin: 20px 0; flex-wrap: wrap;">
+                <span style="background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px;">🔬 OpenCV</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px;">📊 Plotly</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px;">⚡ Streamlit</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px;">🧮 NumPy</span>
+            </div>
+            <p style='font-size: 0.9em; opacity: 0.8; margin-top: 20px; line-height: 1.6;'>
+                🎨 Beautiful Design • 🔬 Scientific Accuracy • 💫 Personalized Results • ⚡ Lightning Fast
+            </p>
+            <p style='font-size: 0.8em; opacity: 0.7; margin-top: 15px;'>
+                ⚠️ For entertainment and educational purposes • Results may vary • Beauty is subjective and unique to everyone
+            </p>
+        </div>
+        <div style='position: absolute; top: -50%; right: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.05), transparent); animation: shine 4s infinite;'></div>
     </div>
     """, unsafe_allow_html=True)
 
