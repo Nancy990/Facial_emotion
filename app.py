@@ -952,7 +952,8 @@ def main():
             face_ratio = shape_analysis.get('face_ratio', 1.3)
             st.markdown(f"<h3 style='color: #FF6B6B; margin: 0;'>📐 Face Ratio</h3>", unsafe_allow_html=True)
             st.markdown(f"<h2 style='color: #C44569; margin: 10px 0;'>{face_ratio:.2f}</h2>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True), warm beauty that\'s very appealing!"
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.write("Warm beauty that's very appealing!")
             else:
                 st.warning(f"🎨 Unique Beauty: {beauty_score:.1f}/100")
                 desc = "Your distinctive features create memorable, unique beauty!"
