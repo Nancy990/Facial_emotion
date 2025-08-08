@@ -953,13 +953,17 @@ def main():
             st.markdown(f"<h3 style='color: #FF6B6B; margin: 0;'>📐 Face Ratio</h3>", unsafe_allow_html=True)
             st.markdown(f"<h2 style='color: #C44569; margin: 10px 0;'>{face_ratio:.2f}</h2>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-            st.write("Warm beauty that's very appealing!")
+            # Apply conditional logic
+            if face_ratio >= 1.3:
+               st.write("Warm beauty that's very appealing!")
+               desc = "Soft warmth and proportional harmony define your facial structure."
             else:
-                st.warning(f"🎨 Unique Beauty: {beauty_score:.1f}/100")
-                desc = "Your distinctive features create memorable, unique beauty!"
-            
-            st.markdown(f"<p style='text-align: center; font-style: italic; color: #FF8C00;'>{desc}</p>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+              st.warning(f"🎨 Unique Beauty: {beauty_score:.1f}/100")
+              desc = "Your distinctive features create memorable, unique beauty!"
+
+    # Show description below
+             st.markdown(f"<p style='text-align: center; font-style: italic; color: #FF8C00;'>{desc}</p>", unsafe_allow_html=True)
+             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_beauty2:
             radar_fig = create_beauty_radar_chart(beauty_factors)
