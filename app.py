@@ -750,7 +750,7 @@ def main():
             </div>
             """, unsafe_allow_html=True)
         
-        # Photography Tips Section (MOVED UP)
+        # Photography Tips Section
         st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
         st.markdown("## 📸 Photography Tips for Stunning Results")
         
@@ -927,7 +927,7 @@ def main():
                 )
                 st.plotly_chart(fig_emotion, use_container_width=True)
         
-        # Detailed Analysis (MOVED TO BOTTOM)
+        # Detailed Analysis
         st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
         st.markdown("## 📊 Detailed Analysis Results")
         
@@ -953,103 +953,8 @@ def main():
             st.markdown(f"<h3 style='color: #FF6B6B; margin: 0;'>📐 Face Ratio</h3>", unsafe_allow_html=True)
             st.markdown(f"<h2 style='color: #C44569; margin: 10px 0;'>{face_ratio:.2f}</h2>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-            # Apply conditional logic
-            if face_ratio >= 1.3:
-               st.write("Warm beauty that's very appealing!")
-               desc = "Soft warmth and proportional harmony define your facial structure."
-            else:
-              st.warning(f"🎨 Unique Beauty: {beauty_score:.1f}/100")
-              desc = "Your distinctive features create memorable, unique beauty!"
-
-    # Show description below
-             st.markdown(f"<p style='text-align: center; font-style: italic; color: #FF8C00;'>{desc}</p>", unsafe_allow_html=True)
-             st.markdown('</div>', unsafe_allow_html=True)
-        
-        with col_beauty2:
-            radar_fig = create_beauty_radar_chart(beauty_factors)
-            if radar_fig:
-                st.plotly_chart(radar_fig, use_container_width=True)
-        
-        # Beauty Factors Breakdown
-        if beauty_factors:
-            st.markdown("#### 📊 Beauty Factors Breakdown")
-            cols = st.columns(len(beauty_factors))
-            for i, (factor_name, score, weight) in enumerate(beauty_factors):
-                with cols[i]:
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    if score >= 85:
-                        st.success(f"**{factor_name}**\n{score:.1f}/100")
-                    elif score >= 70:
-                        st.info(f"**{factor_name}**\n{score:.1f}/100")
-                    else:
-                        st.warning(f"**{factor_name}**\n{score:.1f}/100")
-                    st.caption(f"Weight: {weight:.0%}")
-                    st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Emotion Analysis
-        st.markdown("---")
-        st.markdown("### 😊 Enhanced Emotion Analysis")
-        
-        col_emotion1, col_emotion2 = st.columns([1, 1])
-        
-        with col_emotion1:
-            # Safe confidence calculation
-            try:
-                confidence = max(emotion_probs) if emotion_probs and isinstance(emotion_probs, (list, tuple)) else 0.0
-            except (ValueError, TypeError):
-                confidence = 0.0
-            
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            if confidence > 0.6:
-                st.success(f"🎯 **Detected: {emotion}**")
-                st.success(f"📊 **Confidence**: {confidence:.1%}")
-            elif confidence > 0.4:
-                st.info(f"🎯 **Detected: {emotion}**")
-                st.info(f"📊 **Confidence**: {confidence:.1%}")
-            else:
-                st.warning(f"🎯 **Detected: {emotion}**")
-                st.warning(f"📊 **Confidence**: {confidence:.1%}")
-            
-            # Emotion meanings with orange theme
-            emotion_meanings = {
-                'Happy': "😊 Radiating joy and positive energy! 🧡",
-                'Sad': "😔 Thoughtful or contemplative mood detected.",
-                'Angry': "😠 Intensity and strong determination present.",
-                'Surprised': "😲 Alert, curious, and engaged expression! ✨",
-                'Fear': "😨 Cautious or concerned expression detected.",
-                'Disgust': "😤 Disapproval or distaste in expression.",
-                'Neutral': "😐 Calm, composed, and balanced expression. 🧡"
-            }
-            
-            if emotion in emotion_meanings:
-                st.info(emotion_meanings[emotion])
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with col_emotion2:
-            # Emotion probability chart with orange theme
-            if emotion_probs and emotion_labels and len(emotion_probs) == len(emotion_labels):
-                emotion_df = pd.DataFrame({
-                    'Emotion': emotion_labels,
-                    'Probability': emotion_probs
-                }).sort_values('Probability', ascending=False)
-                
-                fig_emotion = px.bar(
-                    emotion_df, x='Probability', y='Emotion', 
-                    orientation='h',
-                    title='🎭 Emotion Analysis Results',
-                    color='Probability',
-                    color_continuous_scale=['#FFE4B5', '#FF8C00', '#FF4500']
-                )
-                fig_emotion.update_layout(
-                    height=400,
-                    title_font_color='#FF8C00',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)'
-                )
-                st.plotly_chart(fig_emotion, use_container_width=True)
         
         # Enhanced Features Detection Info
-        st.markdown("---")
         st.markdown("### 🔍 Detection Details")
         
         col_detect1, col_detect2, col_detect3, col_detect4 = st.columns(4)
@@ -1057,13 +962,15 @@ def main():
         with col_detect1:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             eyes_count = len(features.get('eyes', [])) if features else 0
-            st.metric("👁️ Eyes Detected", eyes_count)
+            st.markdown(f"<h3 style='color: #4169E1; margin: 0;'>👁️ Eyes</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color: #1E90FF; margin: 10px 0;'>{eyes_count}</h2>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_detect2:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             smiles_count = len(features.get('smiles', [])) if features else 0
-            st.metric("😊 Smiles Detected", smiles_count)
+            st.markdown(f"<h3 style='color: #4169E1; margin: 0;'>😊 Smiles</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color: #1E90FF; margin: 10px 0;'>{smiles_count}</h2>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_detect3:
@@ -1073,7 +980,8 @@ def main():
                 face_area = face_coords[2] * face_coords[3] if (face_coords is not None and len(face_coords) >= 4) else 0
             except (IndexError, TypeError):
                 face_area = 0
-            st.metric("📐 Face Area", f"{face_area:,}px²")
+            st.markdown(f"<h3 style='color: #4169E1; margin: 0;'>📐 Area</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color: #1E90FF; margin: 10px 0;'>{face_area:,}px²</h2>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col_detect4:
@@ -1081,57 +989,9 @@ def main():
             # Safe face width calculation
             measurements = shape_analysis.get('measurements', {}) if shape_analysis else {}
             face_width = measurements.get('face_width', 0) if measurements else 0
-            st.metric("📏 Face Width", f"{face_width}px")
+            st.markdown(f"<h3 style='color: #4169E1; margin: 0;'>📏 Width</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color: #1E90FF; margin: 10px 0;'>{face_width}px</h2>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Recommendations
-        st.markdown("---")
-        st.markdown("### 💄 Personalized Beauty Recommendations")
-        
-        recommendations = get_recommendations(shape_analysis.get('shape', 'Oval'), beauty_factors)
-        
-        st.markdown("#### ✨ Makeup & Styling Tips")
-        cols = st.columns(2)
-        for i, rec in enumerate(recommendations):
-            with cols[i % 2]:
-                st.markdown(f"""
-                <div class="analysis-card">
-                    <h5 style="color: #FF8C00;">{rec}</h5>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Additional tips based on beauty score
-        st.markdown("#### 🌟 Personalized Enhancement Tips")
-        
-        enhancement_tips = []
-        if beauty_score < 70:
-            enhancement_tips.extend([
-                "🧡 **Skincare Focus**: Consistent skincare routine can enhance natural glow",
-                "✨ **Highlighting**: Strategic highlighting can enhance facial structure",
-                "💫 **Confidence**: Your unique features are your greatest asset!"
-            ])
-        
-        # Add tips based on face shape
-        shape_tips = {
-            'Round': ["🔥 **Contouring**: Focus on adding definition to jawline and cheekbones"],
-            'Square': ["🌸 **Softening**: Use curved lines and soft colors to balance angular features"],
-            'Heart': ["💋 **Balance**: Draw attention to lips to balance wider forehead"],
-            'Rectangle': ["🌟 **Width**: Add horizontal elements to create width illusion"],
-            'Diamond': ["💎 **Harmony**: Soften cheekbones while enhancing forehead and chin"],
-            'Oval': ["✨ **Versatility**: You can experiment with most makeup styles!"]
-        }
-        
-        current_shape = shape_analysis.get('shape', 'Oval')
-        if current_shape in shape_tips:
-            enhancement_tips.extend(shape_tips[current_shape])
-        
-        # Display enhancement tips
-        for tip in enhancement_tips:
-            st.markdown(f"""
-            <div class="analysis-card">
-                <p style="margin: 0; color: #333;">{tip}</p>
-            </div>
-            """, unsafe_allow_html=True)
         
         # Comparison Feature
         st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
