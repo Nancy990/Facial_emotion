@@ -1003,7 +1003,7 @@ def main():
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
-    main()beauty1:
+    main()
             st.markdown('<div class="beauty-score-card">', unsafe_allow_html=True)
             if beauty_score >= 85:
                 st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🌟 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
