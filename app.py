@@ -618,6 +618,32 @@ def main():
         
         col_beauty1, col_beauty2 = st.columns([1, 1])
         
+        with col_beauty1:
+            st.markdown('<div class="beauty-score-card">', unsafe_allow_html=True)
+            if beauty_score >= 85:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🌟 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Exceptional Beauty</h3>", unsafe_allow_html=True)
+                desc = "You possess stunning, exceptional beauty!"
+            elif beauty_score >= 75:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>✨ {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Very Attractive</h3>", unsafe_allow_html=True)
+                desc = "You have highly attractive, striking features!"
+            elif beauty_score >= 65:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🧡 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Above Average</h3>", unsafe_allow_html=True)
+                desc = "Your features are notably attractive and well-balanced!"
+            elif beauty_score >= 55:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🌸 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Naturally Pretty</h3>", unsafe_allow_html=True)
+                desc = "You have natural, warm beauty that's very appealing!"
+            else:
+                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🎨 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin: 10px 0;'>Unique Beauty</h3>", unsafe_allow_html=True)
+                desc = "Your distinctive features create memorable, unique beauty!"
+            
+            st.markdown(f"<p style='font-style: italic; opacity: 0.9; margin: 15px 0;'>{desc}</p>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
         with col_beauty2:
             radar_fig = create_beauty_radar_chart(beauty_factors)
             if radar_fig:
@@ -1004,29 +1030,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-            st.markdown('<div class="beauty-score-card">', unsafe_allow_html=True)
-            if beauty_score >= 85:
-                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🌟 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
-                st.markdown("<h3 style='margin: 10px 0;'>Exceptional Beauty</h3>", unsafe_allow_html=True)
-                desc = "You possess stunning, exceptional beauty!"
-            elif beauty_score >= 75:
-                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>✨ {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
-                st.markdown("<h3 style='margin: 10px 0;'>Very Attractive</h3>", unsafe_allow_html=True)
-                desc = "You have highly attractive, striking features!"
-            elif beauty_score >= 65:
-                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🧡 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
-                st.markdown("<h3 style='margin: 10px 0;'>Above Average</h3>", unsafe_allow_html=True)
-                desc = "Your features are notably attractive and well-balanced!"
-            elif beauty_score >= 55:
-                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🌸 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
-                st.markdown("<h3 style='margin: 10px 0;'>Naturally Pretty</h3>", unsafe_allow_html=True)
-                desc = "You have natural, warm beauty that's very appealing!"
-            else:
-                st.markdown(f"<h2 style='margin: 0; font-size: 2.5em;'>🎨 {beauty_score:.1f}/100</h2>", unsafe_allow_html=True)
-                st.markdown("<h3 style='margin: 10px 0;'>Unique Beauty</h3>", unsafe_allow_html=True)
-                desc = "Your distinctive features create memorable, unique beauty!"
-            
-            st.markdown(f"<p style='font-style: italic; opacity: 0.9; margin: 15px 0;'>{desc}</p>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with col_
